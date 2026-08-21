@@ -1,45 +1,39 @@
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
+plugins {
+    id("com.android.application")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.axl.petal"
+    compileSdk = 37
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-}
 
-val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
-        .dir("../../build")
-        .get()
-rootProject.layout.buildDirectory.value(newBuildDir)
+    defaultConfig {
+        applicationId = "com.axl.petal"
+        minSdk = flutter.minSdkVersion
+        targetSdk = 37
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
 
-subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
-}
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-tasks.register<Delete>("clean") {
-    delete(rootProject.layout.buildDirectory)
-}
-
-// --- Petal: force compileSdk on all subprojects ---
-// A real CI failure proved every Flutter plugin subproject (file_picker,
-// flutter_plugin_android_lifecycle, etc.) resolves its OWN compileSdk
-// independently of the app module's build.gradle(.kts) — patching only the
-// app module left plugins on Flutter's old default (android-34) while a
-// plugin dependency required 36+. This reaches into every subproject after
-// it evaluates and force-sets compileSdk uniformly, app + plugins alike.
-subprojects {
-    pluginManager.withPlugin("com.android.application") {
-        extensions.configure<com.android.build.gradle.BaseExtension> {
-            compileSdkVersion(37)
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
 
-    pluginManager.withPlugin("com.android.library") {
-        extensions.configure<com.android.build.gradle.BaseExtension> {
-            compileSdkVersion(37)
-        }
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+flutter {
+    source = "../.."
 }
