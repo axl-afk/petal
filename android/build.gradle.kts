@@ -22,3 +22,17 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+// --- Petal: force compileSdk on all subprojects ---
+// A real CI failure proved every Flutter plugin subproject (file_picker,
+// flutter_plugin_android_lifecycle, etc.) resolves its OWN compileSdk
+// independently of the app module's build.gradle(.kts) — patching only the
+// app module left plugins on Flutter's old default (android-34) while a
+// plugin dependency required 36+. This reaches into every subproject after
+// it evaluates and force-sets compileSdk uniformly, app + plugins alike.
+subprojects {
+    afterEvaluate {
+        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+            ?.compileSdkVersion(36)
+    }
+}

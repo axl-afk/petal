@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/services/window/window_service.dart';
 import '../../state/auth_controller.dart';
 import '../../state/cloud_sync_controller.dart';
 import '../../state/nav_controller.dart';
@@ -52,7 +53,15 @@ class AppShell extends ConsumerWidget {
     });
 
     return Scaffold(
-      body: SafeArea(
+      // ValueListenableBuilder around the whole responsive tree: an
+      // insurance rebuild on desktop window resize / macOS fullscreen
+      // enter-or-leave (see WindowService.rebuildTick's doc comment for why
+      // this is defensive, not a fix for a known engine bug) — a no-op
+      // ValueNotifier that never changes on web/mobile, so this has zero
+      // effect there.
+      body: ValueListenableBuilder<int>(
+        valueListenable: WindowService.rebuildTick,
+        builder: (context, _, __) => SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
@@ -74,7 +83,33 @@ class AppShell extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (showRail) const SideRail(),
-                          Expanded(child: _MainContent(section: section)),
+                          Expanded(
+                            // Cross-fades + a small upward slide between
+                            // sections (library <-> now playing <-> lyrics
+                            // <-> settings/add source) instead of an
+                            // instant swap — the same nav model
+                            // (currentSectionProvider, no Navigator routes)
+                            // just with a transition. Keyed on `section` so
+                            // AnimatedSwitcher treats each section as a
+                            // distinct child and actually animates between
+                            // them rather than rebuilding one in place.
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              transitionBuilder: (child, animation) => FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: Tween<Offset>(begin: const Offset(0, 0.02), end: Offset.zero).animate(animation),
+                                  child: child,
+                                ),
+                              ),
+                              child: KeyedSubtree(
+                                key: ValueKey(section),
+                                child: _MainContent(section: section),
+                              ),
+                            ),
+                          ),
                           if (showRightRail) const RightRail(),
                         ],
                       ),
@@ -85,6 +120,7 @@ class AppShell extends ConsumerWidget {
               ),
             );
           },
+        ),
         ),
       ),
     );

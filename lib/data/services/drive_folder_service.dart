@@ -81,4 +81,28 @@ class DriveFolderService {
 
     return all;
   }
+
+  /// Looks up a single Drive file's real name by id — used when a user
+  /// pastes a single-file share link without typing a title (see
+  /// LibraryController.connectLink), so the track shows its actual
+  /// filename instead of a generic "Untitled Track". Same `drive.readonly`
+  /// scope [listAudioFiles] above already needs — no extra permission
+  /// grant. Best-effort: returns null on any failure (not signed in, no
+  /// network, file not accessible, deleted) rather than throwing, so a
+  /// failed lookup just falls back to whatever title the caller already
+  /// had rather than blocking the whole "add a source" action over a
+  /// cosmetic detail.
+  Future<String?> getFileName(String accessToken, String fileId) async {
+    final uri = Uri.parse('$_filesUrl/$fileId').replace(queryParameters: {'fields': 'name'});
+    try {
+      final res = await _client
+          .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return null;
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      return json['name'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }

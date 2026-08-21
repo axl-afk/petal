@@ -3,9 +3,11 @@
 apply_packaging_snippets.py
 
 Merges Petal's packaging/ snippets — the petalauth:// OAuth redirect scheme,
-Android permissions, macOS sandbox entitlements, and a compileSdk/targetSdk
-bump — into the platform folders that `flutter create .` generates. The
-content mirrors:
+Android permissions, macOS sandbox entitlements, an Android compileSdk/
+targetSdk bump (app module AND every plugin subproject — see
+add_subprojects_compilesdk_override()), and iOS App-Store-review usage-
+description strings — into the platform folders that `flutter create .`
+generates. The content mirrors:
 
     packaging/android/AndroidManifest-snippet.xml
     packaging/ios-macos/Info-snippet.plist
@@ -26,8 +28,9 @@ SAFETY
     - Safe to re-run: each merge checks whether it already applied (looks
       for the petalauth scheme / the same entitlement keys) and skips if so,
       rather than duplicating the insertion.
-    - The plist-based merges (Info.plist x2, entitlements x2) go through
-      Python's plistlib, so they can't produce malformed XML. The Android
+    - The plist-based merges (Info.plist URL scheme x2, entitlements x2,
+      iOS usage descriptions x1) go through Python's plistlib, so they
+      can't produce malformed XML. The Android
       manifest merge is a plain-text insertion at the two exact tag
       boundaries described in the packaging README, guarded by a check that
       each anchor tag appears exactly once before touching the file.
@@ -65,6 +68,29 @@ URL_SCHEME_ENTRY = {
 ENTITLEMENT_KEYS = {
     "com.apple.security.network.client": True,
     "com.apple.security.files.user-selected.read-only": True,
+}
+
+# A real, verified finding (not a guess): file_picker ships one unified
+# Darwin binary that links Photos-framework code for its FileType.image/
+# video support regardless of which FileType your own Dart code actually
+# calls — Apple's App Store/TestFlight static-binary scan can flag a
+# missing NSPhotoLibraryUsageDescription even though this app only ever
+# uses FileType.custom for audio (see github.com/miguelpruivo/
+# flutter_file_picker issue #783, where Apple's own review message says
+# "While your app might not use these APIs, a purpose string is still
+# required"). This is an iOS-only App Store review requirement, not a
+# runtime permission dialog — the app never actually touches Photos.
+IOS_USAGE_DESCRIPTIONS = {
+    "NSPhotoLibraryUsageDescription": (
+        "Petal uses the Files picker to let you choose audio files to import "
+        "— it doesn't access your photo library."
+    ),
+    "NSAppleMusicUsageDescription": (
+        "Petal doesn't read your Apple Music library. This string exists only "
+        "because a bundled file-picker library links media framework code "
+        "that Apple's App Store review checks for, even though Petal never "
+        "calls it."
+    ),
 }
 
 PERMISSION_BLOCK = (
@@ -154,6 +180,35 @@ def merge_entitlements(path: Path):
     print(f"OK    {path.relative_to(ROOT)} — added {', '.join(to_add)}")
 
 
+def merge_ios_usage_descriptions(path: Path):
+    """iOS-only (ios/Runner/Info.plist) — NOT applied to macOS's Info.plist,
+    since the App Store static-scan issue this works around (see
+    IOS_USAGE_DESCRIPTIONS' comment) is specific to iOS binary review, and
+    macOS's file_picker implementation doesn't link the same Photos-
+    framework code.
+    """
+    if not require(path):
+        return
+    try:
+        with open(path, "rb") as f:
+            data = plistlib.load(f)
+    except Exception as e:
+        print(f"MANUAL {path.relative_to(ROOT)} — couldn't parse as plist ({e}); "
+              f"add NSPhotoLibraryUsageDescription / NSAppleMusicUsageDescription by hand")
+        return
+
+    to_add = {k: v for k, v in IOS_USAGE_DESCRIPTIONS.items() if k not in data}
+    if not to_add:
+        print(f"SKIP  {path.relative_to(ROOT)} — usage-description keys already present")
+        return
+
+    data.update(to_add)
+    backup(path)
+    with open(path, "wb") as f:
+        plistlib.dump(data, f)
+    print(f"OK    {path.relative_to(ROOT)} — added {', '.join(to_add)}")
+
+
 def merge_manifest(path: Path):
     if not require(path):
         return
@@ -206,29 +261,127 @@ def bump_android_sdk():
     text = path.read_text()
     original = text
 
-    def bump(text: str, keyword: str) -> str:
-        # Matches "compileSdk = flutter.compileSdkVersion", "compileSdk = 31",
-        # "compileSdkVersion flutter.compileSdkVersion", "compileSdk 31", etc.
-        # — keyword with optional "Version" suffix, then "=" or whitespace,
-        # then either a flutter.* property reference or a literal integer.
-        pattern = re.compile(
+    # keyword with optional "Version" suffix, then "=" or whitespace, then
+    # either a flutter.* property reference or a literal integer. Matches
+    # "compileSdk = flutter.compileSdkVersion", "compileSdk = 31",
+    # "compileSdkVersion flutter.compileSdkVersion", "compileSdk 31", etc.
+    def find_pattern(keyword: str) -> re.Pattern:
+        return re.compile(
             rf'({re.escape(keyword)}(?:Version)?)(\s*=\s*|\s+)(flutter\.\w+|\d+)'
         )
-        return pattern.sub(rf'\g<1>\g<2>{ANDROID_SDK_VERSION}', text)
+
+    def bump(text: str, keyword: str) -> str:
+        return find_pattern(keyword).sub(rf'\g<1>\g<2>{ANDROID_SDK_VERSION}', text)
+
+    pattern_found = bool(find_pattern("compileSdk").search(text) or find_pattern("targetSdk").search(text))
 
     text = bump(text, "compileSdk")
     text = bump(text, "targetSdk")
 
     if text == original:
-        print(f"SKIP  {path.relative_to(ROOT)} — compileSdk/targetSdk pattern not "
-              f"found (hand-customized build.gradle?); set both to "
-              f"{ANDROID_SDK_VERSION} by hand")
+        if pattern_found:
+            print(f"SKIP  {path.relative_to(ROOT)} — compileSdk/targetSdk already set to "
+                  f"{ANDROID_SDK_VERSION}, nothing to change")
+        else:
+            print(f"SKIP  {path.relative_to(ROOT)} — compileSdk/targetSdk pattern not "
+                  f"found (hand-customized build.gradle?); set both to "
+                  f"{ANDROID_SDK_VERSION} by hand")
         return
 
     backup(path)
     path.write_text(text)
     print(f"OK    {path.relative_to(ROOT)} — compileSdk/targetSdk set to "
           f"{ANDROID_SDK_VERSION}")
+
+
+SUBPROJECTS_COMPILESDK_MARKER = "// --- Petal: force compileSdk on all subprojects ---"
+
+
+def add_subprojects_compilesdk_override():
+    """Forces EVERY Android subproject — the app module AND every Flutter
+    plugin module (file_picker, flutter_plugin_android_lifecycle, etc.) —
+    to compile against ANDROID_SDK_VERSION, by patching the ROOT-level
+    android/build.gradle(.kts) (NOT android/app/build.gradle(.kts), which
+    bump_android_sdk() above already handles).
+
+    WHY THIS SEPARATE FIX IS NEEDED: a real CI failure showed
+    ":file_picker:checkReleaseAarMetadata" failing because
+    "flutter_plugin_android_lifecycle requires compileSdk 36+" while
+    ":file_picker is currently compiled against android-34" — even after
+    bump_android_sdk() had already patched the app module's build.gradle.kts
+    to compileSdk/targetSdk 36. That's because every Flutter plugin
+    subproject gets its OWN separate `flutter` Gradle extension instance
+    (Flutter's own gradle plugin tooling — PluginHandler.kt — calls
+    `pluginProject.extensions.create("flutter", FlutterExtension::class.java)`
+    once per plugin), and `flutter.compileSdkVersion` on that extension is a
+    hardcoded constant baked into whichever Flutter SDK is installed
+    (FlutterExtension.kt) — nothing in the app module's own build file
+    reaches into a plugin module's copy of that extension. Patching only
+    android/app/build.gradle.kts therefore never touched what compileSdk
+    file_picker (or any other plugin) actually built against.
+
+    The only lever that reaches every subproject uniformly is a ROOT-level
+    `subprojects {}` block that runs after each subproject has been
+    evaluated and force-sets compileSdkVersion directly through the Android
+    Gradle Plugin's own extension API, overriding whatever
+    `flutter.compileSdkVersion` value that module happened to declare. This
+    is the fix that actually makes the build pass; bump_android_sdk() is
+    kept too since it's harmless and keeps the app module's own numbers
+    correct for anyone reading that file by eye.
+    """
+    kts = ROOT / "android/build.gradle.kts"
+    groovy = ROOT / "android/build.gradle"
+    path = kts if kts.exists() else groovy if groovy.exists() else None
+
+    if path is None:
+        print(f"SKIP  android/build.gradle(.kts) — not found. Did you run "
+              f"`flutter create .` first?")
+        return
+
+    text = path.read_text()
+
+    if SUBPROJECTS_COMPILESDK_MARKER in text:
+        print(f"SKIP  {path.relative_to(ROOT)} — subprojects compileSdk override already present")
+        return
+
+    is_kotlin_dsl = path.suffix == ".kts"
+
+    comment = (
+        "// A real CI failure proved every Flutter plugin subproject (file_picker,\n"
+        "// flutter_plugin_android_lifecycle, etc.) resolves its OWN compileSdk\n"
+        "// independently of the app module's build.gradle(.kts) — patching only the\n"
+        "// app module left plugins on Flutter's old default (android-34) while a\n"
+        "// plugin dependency required 36+. This reaches into every subproject after\n"
+        "// it evaluates and force-sets compileSdk uniformly, app + plugins alike.\n"
+    )
+
+    if is_kotlin_dsl:
+        block = (
+            f"\n{SUBPROJECTS_COMPILESDK_MARKER}\n" + comment +
+            "subprojects {\n"
+            "    afterEvaluate {\n"
+            "        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)\n"
+            f"            ?.compileSdkVersion({ANDROID_SDK_VERSION})\n"
+            "    }\n"
+            "}\n"
+        )
+    else:
+        block = (
+            f"\n{SUBPROJECTS_COMPILESDK_MARKER}\n" + comment +
+            "subprojects {\n"
+            "    afterEvaluate { proj ->\n"
+            "        def androidExt = proj.extensions.findByType(com.android.build.gradle.BaseExtension)\n"
+            "        if (androidExt != null) {\n"
+            f"            androidExt.compileSdkVersion({ANDROID_SDK_VERSION})\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+
+    backup(path)
+    path.write_text(text.rstrip("\n") + "\n" + block)
+    print(f"OK    {path.relative_to(ROOT)} — added subprojects{{}} override forcing "
+          f"compileSdk {ANDROID_SDK_VERSION} on every module (app + all plugins)")
 
 
 def main():
@@ -239,6 +392,7 @@ def main():
         ("macOS Info.plist", merge_url_scheme, ROOT / "macos/Runner/Info.plist"),
         ("macOS entitlements (Debug)", merge_entitlements, ROOT / "macos/Runner/DebugProfile.entitlements"),
         ("macOS entitlements (Release)", merge_entitlements, ROOT / "macos/Runner/Release.entitlements"),
+        ("iOS usage descriptions (App Store review)", merge_ios_usage_descriptions, ROOT / "ios/Runner/Info.plist"),
         ("Android manifest", merge_manifest, ROOT / "android/app/src/main/AndroidManifest.xml"),
     ]
 
@@ -251,12 +405,22 @@ def main():
                   f"paste the matching packaging/ snippet in by hand")
         print()
 
-    print("Android compileSdk/targetSdk")
+    print("Android compileSdk/targetSdk (app module)")
     try:
         bump_android_sdk()
     except Exception as e:
         print(f"MANUAL android/app/build.gradle(.kts) — script hit an unexpected "
               f"error ({e}); set compileSdk and targetSdk to {ANDROID_SDK_VERSION} by hand")
+    print()
+
+    print("Android compileSdk (root — forces every plugin subproject too)")
+    try:
+        add_subprojects_compilesdk_override()
+    except Exception as e:
+        print(f"MANUAL android/build.gradle(.kts) — script hit an unexpected "
+              f"error ({e}); add a root-level `subprojects {{ afterEvaluate {{ "
+              f"extensions.findByType(com.android.build.gradle.BaseExtension::class.java)"
+              f"?.compileSdkVersion({ANDROID_SDK_VERSION}) }} }}` block by hand")
     print()
 
     print("Done. Diff against the *.orig backups to review exactly what changed, e.g.:")

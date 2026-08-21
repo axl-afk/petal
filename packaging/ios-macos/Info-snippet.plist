@@ -4,6 +4,16 @@ after you run `flutter create . --platforms=ios,macos`. This registers the
 "petalauth://" URL scheme so flutter_web_auth_2 can catch Microsoft's OAuth
 redirect on both platforms. Must match AuthConfig.microsoftRedirectUri in
 lib/data/services/auth/auth_config.dart.
+
+apply_packaging_snippets.py ALSO adds two more keys to ios/Runner/Info.plist
+ONLY (not macOS) — NSPhotoLibraryUsageDescription and
+NSAppleMusicUsageDescription. These aren't related to the URL scheme above;
+they exist because file_picker ships one unified iOS binary that links
+Photos-framework code regardless of which FileType your own code actually
+calls, and Apple's App Store/TestFlight review can reject a build missing
+those usage-description strings even though this app never touches Photos
+or Apple Music — see IOS_USAGE_DESCRIPTIONS in apply_packaging_snippets.py
+for the exact text and the GitHub issue this was verified against.
 -->
 <key>CFBundleURLTypes</key>
 <array>

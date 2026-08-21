@@ -8,6 +8,7 @@ import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import '../../utils/ui_scale.dart';
+import '../widgets/swipe_down_to_dismiss.dart';
 import '../widgets/track_art.dart';
 import '../widgets/waveform_seekbar.dart';
 
@@ -25,7 +26,15 @@ class NowPlayingScreen extends ConsumerWidget {
       return Center(child: Text('Nothing playing yet.', style: petal.text.meta));
     }
 
-    return Padding(
+    return SwipeDownToDismiss(
+      // Same destination the down-arrow button below already goes to —
+      // dragging the player down is just a second way to trigger it, not
+      // a different behavior. AppShell only hides MiniPlayer while
+      // AppSection.nowPlaying is showing, so leaving this section is what
+      // makes the mini player (with the playlist visible behind/under it)
+      // reappear — see app_shell.dart.
+      onDismiss: () => ref.read(currentSectionProvider.notifier).state = AppSection.library,
+      child: Padding(
       padding: const EdgeInsets.all(28),
       child: Column(
         children: [
@@ -103,6 +112,7 @@ class NowPlayingScreen extends ConsumerWidget {
           ),
           const Spacer(),
         ],
+      ),
       ),
     );
   }

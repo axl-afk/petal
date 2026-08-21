@@ -20,6 +20,19 @@ class LinkResolverService {
   /// Google, unlike a single-file link.
   String? driveFolderId(String rawInput) => _driveFolderId.firstMatch(rawInput.trim())?.group(1);
 
+  /// Returns the Drive file id if [rawInput] is a Google Drive *single-file*
+  /// share link, or null otherwise — the same id [_resolveGoogleDrive]
+  /// already extracts internally to build the direct-download URL, exposed
+  /// here so a caller can look up the file's real name via the Drive API
+  /// (see LibraryController.connectLink) instead of falling back to
+  /// "Untitled Track" when the user didn't type a title.
+  String? driveFileId(String rawInput) {
+    final input = rawInput.trim();
+    final fileMatch = _driveFileId.firstMatch(input);
+    if (fileMatch != null) return fileMatch.group(1);
+    return _driveIdParam.firstMatch(input)?.group(1);
+  }
+
   ResolvedSource resolve(String rawInput) {
     final input = rawInput.trim();
     if (input.isEmpty) {

@@ -95,24 +95,45 @@ guess for you:
   `macos/Runner/Release.entitlements` (macOS's App Sandbox otherwise
   silently blocks network calls and the local-file picker — a macOS-only
   gotcha, since no other platform sandboxes this way).
+- iOS App Store review usage-description strings
+  (`NSPhotoLibraryUsageDescription`/`NSAppleMusicUsageDescription`) into
+  `ios/Runner/Info.plist` **only** (not macOS) — see the comment at the top
+  of `packaging/ios-macos/Info-snippet.plist` for why these exist even
+  though Petal never touches Photos or Apple Music.
+- Android `compileSdk`/`targetSdk` bumped to 36, in **both**
+  `android/app/build.gradle.kts` (the app module) **and** the root
+  `android/build.gradle.kts` (forces the same version on every plugin
+  subproject too — see `add_subprojects_compilesdk_override()`'s doc
+  comment in the script for why both are needed).
 
-You can do this by hand, or run the merge script that does all five edits
-for you:
+You can do this by hand, or run the merge script that does all of it for
+you:
 
 ```bash
 python3 packaging/scripts/apply_packaging_snippets.py
 ```
 
-It merges the plist-based files (`Info.plist` x2, entitlements x2) through
-Python's `plistlib`, so it can't produce malformed XML, and does the
-Android manifest edit as a guarded text insertion. It writes a `.orig`
-backup next to every file it touches the first time, and it's safe to
-re-run — it detects what's already applied and skips it. Diff the backups
-afterward if you want to see exactly what changed, e.g.
+It merges the plist-based files (`Info.plist` URL scheme x2, entitlements
+x2, iOS usage descriptions x1) through Python's `plistlib`, so it can't
+produce malformed XML, and does the Android manifest/Gradle edits as
+guarded text insertions. It writes a `.orig` backup next to every file it
+touches the first time, and it's safe to re-run — it detects what's
+already applied and skips it. Diff the backups afterward if you want to
+see exactly what changed, e.g.
 `diff ios/Runner/Info.plist.orig ios/Runner/Info.plist`. Either way, double-check
 the `CallbackActivity` class name it writes into the Android manifest
 against your installed `flutter_web_auth_2` version before building — see
 the comment in `packaging/android/AndroidManifest-snippet.xml` for why.
+
+Two more dependencies (`window_manager`, `permission_handler`) were added
+for the desktop min-window-size and Android permission-prompt features —
+both are ordinary pure-Dart pub packages, so step 1 (`flutter pub get`)
+already pulls them in; neither needs a packaging-script edit. The one
+thing worth a quick check after `flutter create .`:
+`permission_handler`'s own pub.dev page calls out needing
+`android.useAndroidX=true` in `android/gradle.properties`, which every
+current Flutter template already sets by default — only worth opening that
+file if a build specifically complains about it.
 
 Commit the generated `android/`, `ios/`, `macos/`, `windows/`, `linux/`,
 `web/` folders once you've made these edits — they're deliberately **not**
@@ -404,20 +425,29 @@ lib/
                                   link-resolution results)
     services/                  — link_resolver_service (Drive/OneDrive share
                                   link -> direct stream URL), lyrics_service
-                                  (lrclib.net client + LRC parser), auth/
-                                  (Google + Microsoft OAuth), local_file_service
+                                  (lrclib.net client + LRC parser — fetched
+                                  automatically the moment a track starts
+                                  playing and cached to that track's row,
+                                  see PlaybackController._loadLyricsFor),
+                                  auth/ (Google + Microsoft OAuth),
+                                  local_file_service, window/window_service
+                                  (desktop minimum window size + fullscreen
+                                  rebuild nudge, no-op on mobile/web)
   state/                       — Riverpod controllers: playback (wraps
                                   just_audio), library (search/filter/CRUD
-                                  over the database), auth, theme, nav
+                                  over the database), auth, theme, nav,
+                                  onboarding (first-run gate)
   ui/
     shell/                     — responsive app shell: top bar, side rail,
                                   right rail, mini player
-    screens/                   — Library, Now Playing, Lyrics, Add Source,
-                                  Settings
+    screens/                   — Onboarding, Library, Now Playing, Lyrics,
+                                  Add Source, Settings
     widgets/                   — track table (a lazy SliverList, not an
                                   eagerly-built Column — see "Efficiency"
                                   below), waveform seek bar (a CustomPainter,
-                                  not per-bar widgets), hero banner, grid cards
+                                  not per-bar widgets), hero banner, grid
+                                  cards, swipe_down_to_dismiss (drag-to-fold
+                                  gesture used by Now Playing and Lyrics)
 packaging/                     — per-platform installer configs + the
                                   manifest/plist/entitlements snippets above
 deploy/web/                    — Docker + nginx config for hosting the web
@@ -544,6 +574,61 @@ covers about credentials:
 
 ## Known limitations (v1, honestly noted rather than silently shipped)
 
+- **A pasted single-file Google Drive link with no typed title** now shows
+  the file's real Drive name automatically — but only when you're signed
+  in with Google (the lookup needs a Drive API call, same as folder import
+  already required). Signed out, or if the lookup fails for any reason
+  (offline, revoked access), it still falls back to "Untitled Track" as
+  before — type a title yourself in that case, or sign in first. Drive
+  doesn't expose a song's artist, duration, or album at all (that's not
+  file metadata Drive tracks), so those still show as "Unknown Artist" and
+  blank until the track is actually played, matching how it always worked
+  for OneDrive/direct links, which have no equivalent lookup at all — a
+  background duration probe (loading just enough of the stream to read
+  it before you ever hit play) is a real option but wasn't added here, to
+  avoid shipping an untested async mechanism that's hard to verify without
+  a real account to test against.
+- **Desktop window has a minimum size (380×560)** — `window_manager` sets
+  this at startup (`WindowService.ensureInitialized()`, called from
+  `main()`), so the window can no longer be resized/"folded" down to
+  something the shell can't actually render legibly. No-op on Android/iOS/
+  web. If 380×560 feels wrong for your content once you can actually see it
+  running, it's one constant to change
+  (`lib/data/services/window/window_service_io.dart`).
+- **macOS native-fullscreen layout** — added a `window_manager`
+  `WindowListener` that nudges a rebuild on fullscreen enter/exit and
+  resize, as insurance for the reported "UI doesn't recenter in fullscreen"
+  issue. Verified against Flutter's own macOS embedder source that window-
+  metric propagation on fullscreen transitions works the same as any other
+  resize (not a known engine bug), and nothing in this app's layout code
+  caches a stale size — so this is a defensive addition rather than a
+  confirmed root-cause fix; if fullscreen still looks wrong after this,
+  paste back what you're seeing (ideally a screenshot) so it can be
+  diagnosed against the real behavior instead of guessed at again.
+- **Mobile "slide the player down to fold it" gesture** — dragging Now
+  Playing (or Lyrics) down past ~120px now does the same thing the
+  existing down-arrow button already did (folds back to the mini player +
+  whatever section was showing underneath), just with the content
+  following the drag instead of an instant jump. See
+  `ui/widgets/swipe_down_to_dismiss.dart` — distance-only, no fling/
+  velocity shortcut, since both screens are fixed non-scrolling layouts
+  with no competing scroll gesture to fight.
+- **First-run screen now asks to sign in or "just play music on this
+  device"**, and on Android shows a real permission request for audio-file
+  access. That Android permission is *not* required by anything Petal does
+  today — verified against `file_picker`'s own manifest/changelog that its
+  Android (Storage Access Framework) and iOS (system document picker) flows
+  both already work with zero runtime permission grants, so declining it
+  doesn't break importing music at all. It's there for two honest reasons:
+  the product explicitly wants that first-run moment, and it's real,
+  working plumbing for a future on-device library scan (the phone
+  equivalent of "Scan whole computer," not implemented yet — see below).
+  iOS shows no permission button, since none exists to request; the screen
+  says so instead of faking one.
+- **Playlist/library track rows now show album art** (or the same
+  placeholder icon Mini Player and Now Playing already used) — they simply
+  never rendered any artwork/icon before, unlike every other place a track
+  appears in the app.
 - **Very large Google Drive files**: Drive's "can't scan this file for
   viruses" interstitial (triggered above a certain file size) needs a
   `confirm=` token that isn't handled yet. Typical audio file sizes work
@@ -621,18 +706,32 @@ covers about credentials:
   every one of these was diagnosed from pasted CI logs, not reproduced and
   re-verified locally. Paste back the resulting log if any of these doesn't
   fully resolve it:
-  - **Android**: `flutter build apk` failed at
-    `:audiotags:checkReleaseAarMetadata` (and would very plausibly have hit
-    the same wall from other plugins' AndroidX dependencies even without
-    audiotags) because the generated project compiled against android-31 —
-    modern AndroidX libraries commonly require compileSdk 34+ now.
-    `packaging/scripts/apply_packaging_snippets.py` now also sets
-    `compileSdk`/`targetSdk` to 36 in `android/app/build.gradle(.kts)`
-    (matching Google Play Console's own current target API level
-    requirement, not just "high enough for today's plugins") — **if you
-    already ran that script before this fix existed, re-run it** (safe —
-    it's idempotent) and re-commit the generated file, or CI will keep
-    hitting the same error.
+  - **Android — two separate compileSdk failures, now both fixed**:
+    `flutter build apk` first failed at `:audiotags:checkReleaseAarMetadata`
+    because the generated project compiled against android-31 — modern
+    AndroidX libraries commonly require compileSdk 34+ now. After bumping
+    that, a *second*, different failure showed up:
+    `:file_picker:checkReleaseAarMetadata` — `flutter_plugin_android_lifecycle`
+    (a dependency of the file_picker plugin) requires compileSdk 36+, while
+    file_picker itself was still compiling against android-34. The reason
+    the first fix didn't also cover this: every Flutter plugin subproject
+    (file_picker, flutter_plugin_android_lifecycle, etc.) resolves its own
+    compileSdk independently, via its own private copy of Flutter's
+    `flutter` Gradle extension — patching only the app module's
+    `android/app/build.gradle.kts` never touches what a plugin module
+    itself compiles against. `packaging/scripts/apply_packaging_snippets.py`
+    now fixes both: it sets `compileSdk`/`targetSdk` to 36 in
+    `android/app/build.gradle(.kts)` (the app module) **and** adds a
+    root-level `subprojects { afterEvaluate { ... compileSdkVersion(36) } }`
+    block to `android/build.gradle(.kts)` (the project root) that forces
+    compileSdk 36 on every subproject uniformly — app and every plugin
+    alike, regardless of what each individually declares. Both edits match
+    Google Play Console's own current target API level requirement, not
+    just "high enough for today's plugins." — **if you already ran that
+    script before this fix existed, re-run it** (safe — it's idempotent)
+    and re-commit BOTH the generated `android/app/build.gradle(.kts)` AND
+    the root `android/build.gradle(.kts)`, or CI will keep hitting one of
+    these two errors.
   - **macOS / iOS**: see the `audio_metadata_reader` note above — the
     undefined-symbol linker failures on both platforms were `audiotags`,
     not this project's code or CI config, and are gone now that it's been
@@ -678,6 +777,10 @@ library backup keys off of), `google_sign_in` + `flutter_web_auth_2`
 (OAuth — `google_sign_in` also carries the extra `drive.appdata` scope
 that library backup runs on), `http` (lyrics + link handling, and the raw
 Drive REST API calls in `cloud_backup_service.dart` — the least
-battle-tested *code* here), `shared_preferences` (session/theme only —
-library data always lives in the database), `flutter_launcher_icons`
-(generates real per-platform icons from `assets/icon/`).
+battle-tested *code* here), `shared_preferences` (session/theme/onboarded-
+flag only — library data always lives in the database),
+`flutter_launcher_icons` (generates real per-platform icons from
+`assets/icon/`), `window_manager` (desktop-only — minimum window size +
+fullscreen-transition listener, see "Known limitations"), `permission_handler`
+(Android-only — the first-run audio-access request; not needed by
+`file_picker` itself, see "Known limitations" for why it's here anyway).

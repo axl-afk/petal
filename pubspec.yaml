@@ -60,6 +60,27 @@ dependencies:
   uuid: ^4.5.1
   url_launcher: ^6.3.1
 
+  # Desktop window chrome — sets a minimum window size (so the player can't
+  # be resized/"folded" down to something unusably small) and lets the app
+  # listen for native-fullscreen enter/exit on macOS (see
+  # lib/data/services/window/window_service.dart). Desktop-only: the
+  # package declares no Android/iOS/web platform implementation, so it's a
+  # harmless Dart-level dependency everywhere else — every call to it is
+  # additionally gated behind a defaultTargetPlatform check, never invoked
+  # off Windows/macOS/Linux.
+  window_manager: ^0.5.2
+
+  # First-run "Petal would like access to your audio files" permission
+  # prompt on Android (see ui/screens/onboarding_screen.dart). NOT needed
+  # by file_picker itself — verified against file_picker's own manifest/
+  # changelog that its Android (SAF-based) and iOS (system document-picker)
+  # flows both work with zero runtime permission grants, so this exists
+  # only for the explicit first-run "ask permission" moment the product
+  # wants, and to have real request plumbing in place for a future
+  # on-device MediaStore scan. Requires compileSdk 35+ (already at 36 —
+  # see apply_packaging_snippets.py).
+  permission_handler: ^13.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

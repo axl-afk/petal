@@ -6,6 +6,7 @@ import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/lyric_sync.dart';
+import '../widgets/swipe_down_to_dismiss.dart';
 
 class LyricsScreen extends ConsumerStatefulWidget {
   const LyricsScreen({super.key});
@@ -43,7 +44,13 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
       return Center(child: Text('Play a song to see its lyrics.', style: petal.text.meta));
     }
 
-    return Column(
+    return SwipeDownToDismiss(
+      // Matches the down-arrow button just below: drag-down and tap do the
+      // same thing here (back to Now Playing, not all the way to the
+      // library — Lyrics is one level "deeper" than Now Playing in this
+      // app's flat, non-Navigator section model — see nav_controller.dart).
+      onDismiss: () => ref.read(currentSectionProvider.notifier).state = AppSection.nowPlaying,
+      child: Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
@@ -68,6 +75,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
         ),
         Expanded(child: _LyricsBody(track: track, playback: playback, controller: controller, onAutoScroll: _maybeAutoScroll, scrollController: _scrollController)),
       ],
+      ),
     );
   }
 }

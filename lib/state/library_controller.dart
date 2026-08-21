@@ -290,6 +290,32 @@ class LibraryController extends StateNotifier<LibraryState> {
       _ => TrackSourceType.direct,
     };
 
+    // The "Untitled Track" bug fix: previously, an empty typed title always
+    // fell straight to the generic fallback below — for a single Google
+    // Drive file link, that's avoidable, since folder imports
+    // (_connectDriveFolder below) already show the real Drive filename by
+    // calling the Drive API for it. Do the same thing here when the user
+    // left the title blank and is signed in: look up the file's actual
+    // name instead of guessing. Best-effort — getFileName returns null on
+    // any failure (not signed in, offline, Drive error) and this just
+    // falls through to the plain "Untitled Track" fallback in that case,
+    // same as before this fix existed.
+    var resolvedTitle = title.trim();
+    if (resolvedTitle.isEmpty && sourceType == TrackSourceType.googleDrive && accountEmail != null) {
+      final fileId = resolver.driveFileId(rawLink);
+      if (fileId != null) {
+        final token = await googleAuth.refreshAccessToken();
+        if (token != null) {
+          final driveName = await driveFolder.getFileName(token, fileId);
+          if (driveName != null && driveName.trim().isNotEmpty) {
+            final dot = driveName.lastIndexOf('.');
+            resolvedTitle = dot > 0 ? driveName.substring(0, dot) : driveName.trim();
+          }
+        }
+      }
+    }
+    final finalTitle = resolvedTitle.isEmpty ? 'Untitled Track' : resolvedTitle;
+
     // A deterministic id derived from the link itself (see idForCloudSource)
     // rather than a random one — otherwise pasting the same link twice, or
     // reconnecting it after sign-in, silently duplicated the track. It also
@@ -297,7 +323,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     // another device (see library_sync_service.dart).
     await trackDao.upsert(TracksCompanion.insert(
       id: idForCloudSource(rawLink),
-      title: title.trim().isEmpty ? 'Untitled Track' : title.trim(),
+      title: finalTitle,
       artist: Value(artist),
       sourceType: sourceType,
       sourceUri: resolved.playableUri!,
@@ -310,7 +336,13 @@ class LibraryController extends StateNotifier<LibraryState> {
         accountEmail: accountEmail,
         provider: sourceType,
         rawLink: rawLink,
-        label: title,
+        // finalTitle, not the original (possibly blank) title argument —
+        // otherwise the real Drive-looked-up name above would show
+        // immediately but get silently overwritten by "Untitled Track"
+        // the next time this source resyncs from SavedSources (see
+        // reconnectSavedSourcesForAccount and library_sync_service.dart's
+        // applySnapshot, both of which read this label back later).
+        label: finalTitle,
       );
       _scheduleBackupIfGoogle();
     }

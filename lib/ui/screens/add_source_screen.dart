@@ -42,9 +42,17 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
     });
 
     final email = ref.read(authControllerProvider).session?.email;
+    // Pass the title through as-typed — including blank — rather than
+    // pre-filling "Untitled Track" here. LibraryController.connectLink now
+    // does something smarter with a blank title for a single Google Drive
+    // link (looks up the file's real name via the Drive API when signed
+    // in — see its doc comment); pre-filling the fallback here would have
+    // defeated that before it ever got a chance to run. connectLink still
+    // falls back to "Untitled Track" itself when the lookup isn't
+    // possible/fails, so behavior is unchanged for every other case.
     final result = await ref.read(libraryControllerProvider.notifier).connectLink(
           rawLink: _linkController.text,
-          title: _titleController.text.isEmpty ? 'Untitled Track' : _titleController.text,
+          title: _titleController.text,
           artist: _artistController.text.isEmpty ? 'Unknown Artist' : _artistController.text,
           accountEmail: email,
         );
@@ -206,6 +214,14 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                       const SizedBox(width: 10),
                       Expanded(child: _Field(controller: _artistController, hint: 'Artist (optional)')),
                     ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Leave title blank for a single Google Drive file and, if you\'re signed in, '
+                      'Petal fills it in from the file\'s real name automatically.',
+                      style: petal.text.cardSubtitle,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   SizedBox(

@@ -8,6 +8,7 @@ import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
+import 'track_art.dart';
 
 /// The track listing used by every "songs" view (full library, an artist,
 /// a genre, a playlist, favorites, or search results) — same table, just a
@@ -121,6 +122,14 @@ class _TrackRowState extends State<_TrackRow> {
                       : Text('${widget.index}', style: petal.text.meta, textAlign: TextAlign.center),
                 ),
                 const SizedBox(width: 8),
+                // The actual "playlist view music icon doesn't show up" fix
+                // — every row used to skip straight from the index/play
+                // button to text, with no artwork/placeholder icon at all,
+                // unlike MiniPlayer and NowPlayingScreen (both already used
+                // TrackArt). Falls back to the same music-note placeholder
+                // those do when a track has no artwork.
+                TrackArt(track: track, size: 36, iconSize: 16, borderRadius: BorderRadius.circular(6)),
+                const SizedBox(width: 10),
                 Expanded(
                   flex: 3,
                   child: Column(

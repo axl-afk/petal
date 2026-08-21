@@ -37,6 +37,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Petal doesn't read your Apple Music library. This string exists only because a bundled file-picker library links media framework code that Apple's App Store review checks for, even though Petal never calls it.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Petal uses the Files picker to let you choose audio files to import — it doesn't access your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
