@@ -25,8 +25,8 @@ class PlaylistDao extends DatabaseAccessor<AppDatabase> with _$PlaylistDaoMixin 
       (update(playlists)..where((p) => p.id.equals(id)))
           .write(PlaylistsCompanion(name: Value(name)));
 
-  Future<void> delete(String id) =>
-      (db.delete(playlists)..where((p) => p.id.equals(id))).go();
+Future<void> deletePlaylist(String id) =>
+    (db.delete(playlists)..where((p) => p.id.equals(id))).go();
 
   Stream<List<Track>> watchTracks(String playlistId) {
     final query = select(playlistTracks).join([
