@@ -1,0 +1,14 @@
+<!--
+Merge these two keys into the <dict> of BOTH macos/Runner/DebugProfile.entitlements
+and macos/Runner/Release.entitlements after `flutter create . --platforms=macos`.
+macOS's App Sandbox (which the default Flutter macOS template enables via
+com.apple.security.app-sandbox) blocks outgoing network calls and file access
+unless explicitly entitled — without these two keys, Petal will build fine
+but silently fail to reach lrclib.net/Drive/OneDrive and fail to open the
+file_picker dialog on macOS specifically (other platforms aren't sandboxed
+this way, so this is a macOS-only gotcha).
+-->
+<key>com.apple.security.network.client</key>
+<true/>
+<key>com.apple.security.files.user-selected.read-only</key>
+<true/>

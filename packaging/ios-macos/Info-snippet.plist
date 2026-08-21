@@ -1,0 +1,18 @@
+<!--
+Merge this into the <dict> of ios/Runner/Info.plist AND macos/Runner/Info.plist
+after you run `flutter create . --platforms=ios,macos`. This registers the
+"petalauth://" URL scheme so flutter_web_auth_2 can catch Microsoft's OAuth
+redirect on both platforms. Must match AuthConfig.microsoftRedirectUri in
+lib/data/services/auth/auth_config.dart.
+-->
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>petalauth</string>
+        </array>
+        <key>CFBundleURLName</key>
+        <string>com.petal.player.auth</string>
+    </dict>
+</array>

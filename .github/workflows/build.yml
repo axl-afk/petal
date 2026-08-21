@@ -1,0 +1,160 @@
+# Builds Petal for every target platform on GitHub's own runners — real
+# Android/Windows/macOS/Linux/web environments with full internet access,
+# which is exactly what this project's own authoring sandbox didn't have.
+# This is the actual answer to "can I build apk/app/exe/pkg/dmg/web from
+# this": push to GitHub, let this workflow run, download the artifacts from
+# the run's Summary page.
+#
+# ONE-TIME SETUP BEFORE THIS WORKFLOW WILL WORK (see README.md "Setup"):
+#   1. flutter create . --platforms=android,ios,macos,windows,linux,web
+#   2. Apply the manifest/plist/entitlements snippets in packaging/ (OAuth
+#      redirect URL scheme + macOS sandbox entitlements + Android media
+#      permissions) — these are project-specific edits CI can't safely
+#      guess, which is why this workflow does NOT run `flutter create .`
+#      itself: that would silently wipe your customizations on every run.
+#   3. Commit the generated android/, ios/, macos/, windows/, linux/, web/
+#      folders (i.e. remove them from .gitignore, or force-add them).
+#
+# Until step 3 is done, every job below will fail at the "flutter build"
+# step with a missing-platform-folder error — that's expected, not a bug in
+# this workflow.
+
+name: Build Petal
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  FLUTTER_CHANNEL: stable
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart run flutter_launcher_icons
+      - run: flutter build apk --release
+      - run: flutter build appbundle --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petal-android
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart run flutter_launcher_icons
+      # sqlite3.wasm + drift_worker.js must already be committed in web/ —
+      # see README.md "Web build setup".
+      - run: flutter build web --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petal-web
+          path: build/web
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart run flutter_launcher_icons
+      - run: flutter build windows --release
+      - name: Build installer with Inno Setup
+        run: |
+          choco install innosetup -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\windows\installer.iss
+        shell: pwsh
+        continue-on-error: true # unsigned-installer step; the raw build below always succeeds regardless
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petal-windows
+          path: |
+            build/windows/x64/runner/Release/**
+            build/installer/*.exe
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart run flutter_launcher_icons
+      - run: flutter build macos --release
+      - name: Package .dmg and .pkg
+        run: bash packaging/macos/build_dmg_pkg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petal-macos
+          path: |
+            build/macos-installers/*.dmg
+            build/macos-installers/*.pkg
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart run flutter_launcher_icons
+      # --no-codesign: a real device / App Store build needs your own Apple
+      # Developer certificate + provisioning profile, added as repo secrets
+      # and wired into a signing step — that can't be filled in on your
+      # behalf. This produces an unsigned .app you can inspect/simulator-run.
+      - run: flutter build ios --release --no-codesign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petal-ios-unsigned
+          path: build/ios/iphoneos/Runner.app
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - name: Install Linux desktop build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart run flutter_launcher_icons
+      - run: flutter build linux --release
+      - name: Package AppImage
+        run: bash packaging/linux/build_appimage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petal-linux
+          path: |
+            build/linux/x64/release/bundle/**
+            build/linux/*.AppImage

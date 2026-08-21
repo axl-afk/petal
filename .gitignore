@@ -1,0 +1,22 @@
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/pubspec.lock
+**/*.g.dart
+**/*.freezed.dart
+
+# The platform folders (android/, ios/, macos/, windows/, linux/, web/) are
+# INTENTIONALLY NOT ignored — commit them once generated + customized per
+# README.md "Setup" / packaging/*, since the GitHub Actions workflow in
+# .github/workflows/build.yml builds directly from whatever's committed
+# rather than regenerating them (which would wipe your manifest/plist edits
+# on every run).
+
+.DS_Store
+*.iml
+.idea/
+appimagetool

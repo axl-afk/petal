@@ -1,0 +1,205 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../state/auth_controller.dart';
+import '../../state/library_controller.dart';
+import '../../theme/app_theme.dart';
+
+class AddSourceScreen extends ConsumerStatefulWidget {
+  const AddSourceScreen({super.key});
+
+  @override
+  ConsumerState<AddSourceScreen> createState() => _AddSourceScreenState();
+}
+
+class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
+  final _linkController = TextEditingController();
+  final _titleController = TextEditingController();
+  final _artistController = TextEditingController();
+  bool _busy = false;
+  String? _error;
+  String? _success;
+
+  @override
+  void dispose() {
+    _linkController.dispose();
+    _titleController.dispose();
+    _artistController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connect() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _success = null;
+    });
+
+    final email = ref.read(authControllerProvider).session?.email;
+    final result = await ref.read(libraryControllerProvider.notifier).connectLink(
+          rawLink: _linkController.text,
+          title: _titleController.text.isEmpty ? 'Untitled Track' : _titleController.text,
+          artist: _artistController.text.isEmpty ? 'Unknown Artist' : _artistController.text,
+          accountEmail: email,
+        );
+
+    setState(() {
+      _busy = false;
+      if (result.ok) {
+        _success = 'Added — check Songs in your Library.';
+        _linkController.clear();
+        _titleController.clear();
+        _artistController.clear();
+      } else {
+        _error = result.error ?? 'Something went wrong resolving that link.';
+      }
+    });
+  }
+
+  Future<void> _importLocal() async {
+    try {
+      await ref.read(libraryControllerProvider.notifier).importLocalFiles();
+      setState(() => _success = 'Imported local files into your library.');
+    } catch (e) {
+      setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Add a source', style: petal.text.heroTitle.copyWith(fontSize: 22)),
+            const SizedBox(height: 6),
+            Text(
+              'Paste a public Google Drive or OneDrive share link, or import files from this device.',
+              style: petal.text.heroSub,
+            ),
+            const SizedBox(height: 24),
+
+            _Card(
+              title: 'From a link',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Field(controller: _linkController, hint: 'https://drive.google.com/file/d/... or a OneDrive link'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: _Field(controller: _titleController, hint: 'Title (optional)')),
+                      const SizedBox(width: 10),
+                      Expanded(child: _Field(controller: _artistController, hint: 'Artist (optional)')),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: petal.colors.accent,
+                        foregroundColor: petal.colors.accentInk,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PetalTheme.radiusPill)),
+                      ),
+                      onPressed: _busy ? null : _connect,
+                      child: _busy
+                          ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: petal.colors.accentInk))
+                          : const Text('Connect'),
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_error!, style: TextStyle(color: Colors.redAccent.shade200, fontSize: 12.5)),
+                  ],
+                  if (_success != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_success!, style: TextStyle(color: petal.colors.good, fontSize: 12.5)),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            _Card(
+              title: 'From this device',
+              child: kIsWeb
+                  ? Text(
+                      'The web version of Petal doesn\'t have access to local files — install the app for macOS, Windows, Linux, Android, or iOS to import from your device.',
+                      style: petal.text.cardSubtitle,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Import audio files already on this device.', style: petal.text.cardSubtitle),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _importLocal,
+                          icon: const Icon(Icons.folder_open_outlined, size: 18),
+                          label: const Text('Choose files'),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
+  final String title;
+  final Widget child;
+  const _Card({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: petal.colors.surface, borderRadius: BorderRadius.circular(PetalTheme.radiusCard)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: petal.text.settingsGroupTitle),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _Field extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  const _Field({required this.controller, required this.hint});
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return TextField(
+      controller: controller,
+      style: TextStyle(fontSize: 13.5, color: petal.colors.ink),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13),
+        filled: true,
+        fillColor: petal.colors.surface2,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+      ),
+    );
+  }
+}

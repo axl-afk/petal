@@ -1,0 +1,16 @@
+# From the repo root, on your VPS:
+#   docker compose -f deploy/web/docker-compose.yml up -d --build
+#
+# Then point a reverse proxy (Caddy/Traefik/nginx already on the VPS, or
+# Cloudflare in front of it) at this container's port 80 for TLS — this
+# compose file deliberately doesn't handle certificates itself, since that's
+# usually already solved at the VPS level and duplicating it here would
+# just be one more thing to keep in sync.
+services:
+  petal-web:
+    build:
+      context: ../..
+      dockerfile: deploy/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:80"

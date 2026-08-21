@@ -1,0 +1,91 @@
+name: petal
+description: "Petal — a cross-platform music player for local files and pasted Google Drive / OneDrive links, with time-synced lyrics."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+# NOTE ON VERSIONS
+# These versions were current at the time this project was authored (mid-2025).
+# This project could not be built or `pub get`-resolved inside the sandbox that
+# generated it (see README.md — the sandbox blocks pub.dev / storage.googleapis.com
+# outbound access). On your own machine, run `flutter pub get` first; if any
+# version fails to resolve, run `flutter pub upgrade --major-versions` and fix
+# any resulting breaking-change warnings — package APIs may have moved on since.
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+
+  # Database (structured storage + FTS5 full-text search)
+  drift: ^2.20.1
+  sqlite3_flutter_libs: ^0.5.24
+  sqlite3: ^2.4.6
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Playback (local files + HTTP-streamed Drive/OneDrive direct links)
+  just_audio: ^0.9.40
+  just_audio_web: ^0.4.13
+  audio_session: ^0.1.21
+
+  # Local file import (desktop/mobile only — gated behind kIsWeb)
+  file_picker: ^8.1.2
+
+  # Auth
+  google_sign_in: ^6.2.1
+  flutter_web_auth_2: ^4.0.0   # generic OAuth2 browser round-trip, used for Microsoft sign-in
+  crypto: ^3.0.5               # PKCE code_challenge generation for Microsoft OAuth
+
+  # Networking
+  http: ^1.2.2
+
+  # Persistence for session / theme / small settings (not library data — that's in drift)
+  shared_preferences: ^2.3.2
+
+  uuid: ^4.5.1
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.13
+  drift_dev: ^2.20.1
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/icon/
+
+# Generates real per-platform app icons (Android adaptive icon, iOS, macOS,
+# Windows, web favicon/manifest icons) from the monochrome petal mark in
+# assets/icon/ — run `dart run flutter_launcher_icons` after `flutter pub
+# get` and before your first release build of each platform. Source images
+# were generated to match the approved design's dark ground / white ink
+# tokens (see lib/theme/app_colors.dart).
+flutter_launcher_icons:
+  image_path: "assets/icon/icon_square.png"
+  android: true
+  min_sdk_android: 21
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  ios: true
+  remove_alpha_ios: true
+  macos:
+    generate: true
+    image_path: "assets/icon/icon_square.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/icon_square.png"
+    icon_size: 256
+  web:
+    generate: true
+    image_path: "assets/icon/icon_square.png"
+    background_color: "#0A0A0B"
+    theme_color: "#0A0A0B"

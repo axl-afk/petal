@@ -1,0 +1,36 @@
+<!--
+Merge these into android/app/src/main/AndroidManifest.xml after you run
+`flutter create . --platforms=android`. Two separate additions:
+
+1. Permissions (outside <application>, as siblings of <application>) — local
+   file import (file_picker) and streaming from Drive/OneDrive/lrclib.net
+   both need these. INTERNET is implicitly required by any app that makes
+   network calls; the media permission covers Android 13+'s scoped storage
+   model, with the pre-13 permission as a fallback for older devices.
+-->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+
+<!--
+2. Intent filter, added as a new <activity> or inside your existing main
+   <activity> block (the one with android:name=".MainActivity") — this is
+   what lets flutter_web_auth_2 catch the redirect back from Microsoft's
+   sign-in page. The scheme here MUST match AuthConfig.microsoftRedirectUri
+   in lib/data/services/auth/auth_config.dart (default: "petalauth://auth").
+-->
+<!-- The exact CallbackActivity class name below is flutter_web_auth_2's as of
+     when this was written — double-check it against the installed package's
+     own README/example under android/, since fork/package names for this
+     kind of plugin do shift between major versions. -->
+<activity
+    android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
+    android:exported="true">
+    <intent-filter android:label="petal_web_auth">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="petalauth" />
+    </intent-filter>
+</activity>
