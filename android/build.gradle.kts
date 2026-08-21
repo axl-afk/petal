@@ -31,8 +31,15 @@ tasks.register<Delete>("clean") {
 // plugin dependency required 36+. This reaches into every subproject after
 // it evaluates and force-sets compileSdk uniformly, app + plugins alike.
 subprojects {
-    afterEvaluate {
-        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
-            ?.compileSdkVersion(36)
+    pluginManager.withPlugin("com.android.application") {
+        extensions.configure<com.android.build.gradle.BaseExtension> {
+            compileSdkVersion(36)
+        }
+    }
+
+    pluginManager.withPlugin("com.android.library") {
+        extensions.configure<com.android.build.gradle.BaseExtension> {
+            compileSdkVersion(36)
+        }
     }
 }
