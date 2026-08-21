@@ -33,13 +33,13 @@ tasks.register<Delete>("clean") {
 subprojects {
     pluginManager.withPlugin("com.android.application") {
         extensions.configure<com.android.build.gradle.BaseExtension> {
-            compileSdkVersion(36)
+            compileSdkVersion(37)
         }
     }
 
     pluginManager.withPlugin("com.android.library") {
         extensions.configure<com.android.build.gradle.BaseExtension> {
-            compileSdkVersion(36)
+            compileSdkVersion(37)
         }
     }
 }
