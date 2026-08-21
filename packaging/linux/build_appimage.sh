@@ -54,5 +54,17 @@ if [ ! -x "appimagetool" ]; then
   chmod +x appimagetool
 fi
 
+# appimagetool is itself distributed as an AppImage, so running it normally
+# needs FUSE to mount it — a real CI run failed here with "dlopen(): error
+# loading libfuse.so.2 / AppImages require FUSE to run" because GitHub's
+# ubuntu-latest runner image (Ubuntu 24.04) doesn't preinstall libfuse2
+# (and the package itself was renamed to libfuse2t64 on 24.04, so even the
+# commonly-cited `apt-get install libfuse2` fix no longer applies there).
+# APPIMAGE_EXTRACT_AND_RUN sidesteps FUSE entirely — appimagetool
+# self-extracts to a temp dir and runs from there instead of mounting —
+# which also means this keeps working if a future ubuntu-latest bump
+# changes the FUSE package situation again.
+export APPIMAGE_EXTRACT_AND_RUN=1
+
 ./appimagetool "$APPDIR" "build/linux/${APP_NAME}-x86_64.AppImage"
 echo "Built build/linux/${APP_NAME}-x86_64.AppImage"

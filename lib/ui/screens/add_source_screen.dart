@@ -24,6 +24,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
   String? _success;
   String? _localError;
   String? _localSuccess;
+  int? _wholeComputerProgress;
 
   @override
   void dispose() {
@@ -120,6 +121,34 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       setState(() => _localError = e.toString());
     } finally {
       setState(() => _busyLocal = false);
+    }
+  }
+
+  Future<void> _scanWholeComputer() async {
+    setState(() {
+      _busyLocal = true;
+      _localError = null;
+      _localSuccess = null;
+      _wholeComputerProgress = 0;
+    });
+    try {
+      final result = await ref.read(libraryControllerProvider.notifier).scanWholeComputer(
+            // Called from inside the scan, potentially many times a
+            // second on a fast disk — setState is cheap enough here since
+            // it's just updating one integer Text, not rebuilding the
+            // track list.
+            onProgress: (foundSoFar) {
+              if (mounted) setState(() => _wholeComputerProgress = foundSoFar);
+            },
+          );
+      setState(() => _localSuccess = result == null ? null : _resultMessage(result));
+    } catch (e) {
+      setState(() => _localError = e.toString());
+    } finally {
+      setState(() {
+        _busyLocal = false;
+        _wholeComputerProgress = null;
+      });
     }
   }
 
@@ -240,6 +269,12 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                                 icon: const Icon(Icons.travel_explore_outlined, size: 18),
                                 label: const Text('Scan Music folder'),
                               ),
+                            if (_isDesktop)
+                              OutlinedButton.icon(
+                                onPressed: _busyLocal ? null : _scanWholeComputer,
+                                icon: const Icon(Icons.dns_outlined, size: 18),
+                                label: const Text('Scan whole computer'),
+                              ),
                           ],
                         ),
                         if (_busyLocal) ...[
@@ -248,7 +283,12 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                             children: [
                               SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: petal.colors.ink2)),
                               const SizedBox(width: 8),
-                              Text('Scanning and importing…', style: petal.text.meta),
+                              Text(
+                                _wholeComputerProgress != null
+                                    ? 'Scanning your computer… $_wholeComputerProgress song${_wholeComputerProgress == 1 ? '' : 's'} found so far'
+                                    : 'Scanning and importing…',
+                                style: petal.text.meta,
+                              ),
                             ],
                           ),
                         ],
@@ -257,7 +297,10 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                           child: Text(
                             '"Choose a folder" imports everything found in it, including subfolders. "Scan Music folder" '
                             'does the same for this machine\'s own Music folder — a quick way to pull in your whole '
-                            'existing library without navigating to it by hand.',
+                            'existing library without navigating to it by hand. "Scan whole computer" checks every '
+                            'drive this machine can see, not just the Music folder — slower, but thorough if your '
+                            'music lives somewhere else. Android/iOS don\'t have an equivalent yet — that needs '
+                            'deeper OS integration (MediaStore / Photos-library access) than a plain folder scan.',
                             style: petal.text.cardSubtitle,
                           ),
                         ),

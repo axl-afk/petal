@@ -3,8 +3,9 @@
 apply_packaging_snippets.py
 
 Merges Petal's packaging/ snippets — the petalauth:// OAuth redirect scheme,
-Android permissions, and macOS sandbox entitlements — into the platform
-folders that `flutter create .` generates. The content mirrors:
+Android permissions, macOS sandbox entitlements, and a compileSdk/targetSdk
+bump — into the platform folders that `flutter create .` generates. The
+content mirrors:
 
     packaging/android/AndroidManifest-snippet.xml
     packaging/ios-macos/Info-snippet.plist
@@ -33,10 +34,27 @@ SAFETY
 """
 
 import plistlib
+import re
 import shutil
 from pathlib import Path
 
 ROOT = Path.cwd()
+
+# A real CI build failed with: ":audiotags:checkReleaseAarMetadata" listing
+# 20 AndroidX dependencies that all require compileSdk 34+, while the
+# generated project was compiling against android-31 — almost certainly
+# because whatever local Flutter install ran `flutter create .` was old
+# enough that `flutter.compileSdkVersion` (the default the template uses,
+# tracking the Flutter tool's own bundled Android metadata rather than a
+# number you set yourself) resolved to 31. That default keeps drifting
+# with whichever Flutter version happens to run `flutter create .`, so
+# this pins an explicit number instead — 36 matches Google Play Console's
+# own current target API level requirement (support.google.com/
+# googleplay/android-developer/answer/11926878), so it isn't just "high
+# enough for today's plugins," it's the number you'd need for a Play Store
+# submission anyway. minSdk is left untouched (set separately, unrelated
+# to this failure).
+ANDROID_SDK_VERSION = 36
 
 URL_SCHEME = "petalauth"
 URL_SCHEME_ENTRY = {
@@ -167,6 +185,52 @@ def merge_manifest(path: Path):
     print(f"OK    {path.relative_to(ROOT)} — added permissions + CallbackActivity intent-filter")
 
 
+def bump_android_sdk():
+    """Sets compileSdk and targetSdk to ANDROID_SDK_VERSION in whichever
+    Gradle file `flutter create .` generated — the Kotlin DSL
+    `build.gradle.kts` (the current Flutter default) or the older Groovy
+    `build.gradle`, whichever exists. Matches both DSLs' syntax variants:
+    Kotlin's `compileSdk = flutter.compileSdkVersion` / `compileSdk = 31`,
+    and Groovy's `compileSdkVersion flutter.compileSdkVersion` /
+    `compileSdk 31`, same for targetSdk.
+    """
+    kts = ROOT / "android/app/build.gradle.kts"
+    groovy = ROOT / "android/app/build.gradle"
+    path = kts if kts.exists() else groovy if groovy.exists() else None
+
+    if path is None:
+        print(f"SKIP  android/app/build.gradle(.kts) — not found. Did you run "
+              f"`flutter create .` first?")
+        return
+
+    text = path.read_text()
+    original = text
+
+    def bump(text: str, keyword: str) -> str:
+        # Matches "compileSdk = flutter.compileSdkVersion", "compileSdk = 31",
+        # "compileSdkVersion flutter.compileSdkVersion", "compileSdk 31", etc.
+        # — keyword with optional "Version" suffix, then "=" or whitespace,
+        # then either a flutter.* property reference or a literal integer.
+        pattern = re.compile(
+            rf'({re.escape(keyword)}(?:Version)?)(\s*=\s*|\s+)(flutter\.\w+|\d+)'
+        )
+        return pattern.sub(rf'\g<1>\g<2>{ANDROID_SDK_VERSION}', text)
+
+    text = bump(text, "compileSdk")
+    text = bump(text, "targetSdk")
+
+    if text == original:
+        print(f"SKIP  {path.relative_to(ROOT)} — compileSdk/targetSdk pattern not "
+              f"found (hand-customized build.gradle?); set both to "
+              f"{ANDROID_SDK_VERSION} by hand")
+        return
+
+    backup(path)
+    path.write_text(text)
+    print(f"OK    {path.relative_to(ROOT)} — compileSdk/targetSdk set to "
+          f"{ANDROID_SDK_VERSION}")
+
+
 def main():
     print("Applying Petal packaging snippets into platform folders...\n")
 
@@ -186,6 +250,14 @@ def main():
             print(f"MANUAL {path} — script hit an unexpected error ({e}); "
                   f"paste the matching packaging/ snippet in by hand")
         print()
+
+    print("Android compileSdk/targetSdk")
+    try:
+        bump_android_sdk()
+    except Exception as e:
+        print(f"MANUAL android/app/build.gradle(.kts) — script hit an unexpected "
+              f"error ({e}); set compileSdk and targetSdk to {ANDROID_SDK_VERSION} by hand")
+    print()
 
     print("Done. Diff against the *.orig backups to review exactly what changed, e.g.:")
     print("  diff ios/Runner/Info.plist.orig ios/Runner/Info.plist")

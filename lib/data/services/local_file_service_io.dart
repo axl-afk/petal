@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:audiotags/audiotags.dart';
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -51,14 +51,10 @@ class LocalFileService {
     return found;
   }
 
-  /// "Scan whole system" in the literal sense (crawl every file on the
-  /// drive) isn't something any real music player actually does — it's slow
-  /// and, on mobile, isn't even permitted without much heavier platform
-  /// integration (MediaStore on Android, the Photos-library-style picker on
-  /// iOS). What every desktop music player actually does instead is scan
-  /// the OS's known Music folder. This does that, for the three desktop
-  /// platforms — returns an empty list (not an error) if that folder
-  /// doesn't exist or isn't accessible.
+  /// The fast, common-case scan: just the OS's known Music folder, on the
+  /// three desktop platforms — returns null (not an error) if that folder
+  /// doesn't exist or isn't accessible. For a real whole-disk crawl, see
+  /// scanWholeComputer below.
   Future<String?> platformMusicFolder() async {
     if (Platform.isMacOS || Platform.isLinux) {
       final home = Platform.environment['HOME'];
@@ -73,6 +69,108 @@ class LocalFileService {
       return await Directory(musicDir).exists() ? musicDir : null;
     }
     return null; // Android/iOS: no equivalent without MediaStore/Photos-style APIs.
+  }
+
+  /// A real, literal whole-computer scan — every user-accessible drive/
+  /// volume, not just the OS Music folder "Scan Music folder" (above)
+  /// covers. Desktop only (see scanWholePhone-equivalent note in
+  /// LibraryController for why Android/iOS need a different mechanism
+  /// entirely, not this). This is slower than the Music-folder scan by
+  /// nature — it's walking far more of the disk — but skips the specific
+  /// places that would otherwise make it *pathologically* slow or just
+  /// noisy: hidden directories (dotfiles/dotfolders — build caches, package
+  /// manager stores, VCS internals) and OS-owned directories that are
+  /// either permission-denied for a normal user anyway or never contain
+  /// personal music (Windows/Program Files, macOS/System+Library,
+  /// Linux/proc+sys+dev). [onProgress], if given, is called after every
+  /// newly-found file so a caller can show a live count during a scan that
+  /// might run for tens of seconds to minutes on a large or slow disk.
+  Future<List<String>> scanWholeComputer({void Function(int foundSoFar)? onProgress}) async {
+    final found = <String>[];
+    for (final root in await _wholeComputerRoots()) {
+      await _scanTreeSkippingNoise(root, found, onProgress);
+    }
+    return found;
+  }
+
+  // Dotfiles/dotfolders (.git, .cache, .npm, .cargo, .dart_tool, etc.) are
+  // already skipped separately below by name.startsWith('.') — not
+  // repeated here.
+  static const _wholeComputerSkipDirs = {
+    // Windows
+    'windows', 'program files', 'program files (x86)', 'programdata',
+    r'$recycle.bin', 'system volume information',
+    // macOS
+    'system', 'library', 'applications',
+    // Linux
+    'proc', 'sys', 'dev', 'run', 'boot', 'snap', 'lost+found',
+    // cross-platform noise that can be enormous and is never personal music
+    'node_modules',
+  };
+
+  Future<List<Directory>> _wholeComputerRoots() async {
+    final roots = <Directory>[];
+    if (Platform.isWindows) {
+      for (final letter in 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('')) {
+        final d = Directory('$letter:\\');
+        if (await d.exists()) roots.add(d);
+      }
+    } else if (Platform.isMacOS) {
+      // /Users (every account's home, incl. Music/Downloads/Desktop/etc.)
+      // and /Volumes (mounted external/network drives) — not literal `/`,
+      // which is almost entirely OS-owned directories on macOS.
+      if (await Directory('/Users').exists()) roots.add(Directory('/Users'));
+      final volumes = Directory('/Volumes');
+      if (await volumes.exists()) {
+        try {
+          await for (final v in volumes.list(followLinks: false)) {
+            if (v is Directory) roots.add(v);
+          }
+        } catch (_) {/* ignore, use whatever roots were already found */}
+      }
+    } else if (Platform.isLinux) {
+      final home = Platform.environment['HOME'];
+      if (home != null && await Directory(home).exists()) roots.add(Directory(home));
+      // Common external-drive mount points on Linux desktops.
+      for (final mountBase in ['/media', '/mnt']) {
+        final d = Directory(mountBase);
+        if (await d.exists()) roots.add(d);
+      }
+    }
+    return roots;
+  }
+
+  /// Manual recursive walk (not `Directory.list(recursive: true)`) so a
+  /// skip-listed directory can be pruned *before* descending into it —
+  /// walking into e.g. Program Files or .cache first and filtering after
+  /// would defeat the entire point of skipping them.
+  Future<void> _scanTreeSkippingNoise(
+    Directory dir,
+    List<String> found,
+    void Function(int)? onProgress, {
+    int depth = 0,
+  }) async {
+    if (depth > 40) return; // guards against a pathological symlink loop
+    List<FileSystemEntity> entries;
+    try {
+      entries = await dir.list(followLinks: false).toList();
+    } catch (_) {
+      return; // permission denied, or it vanished mid-scan — just skip it
+    }
+    for (final entity in entries) {
+      final name = p.basename(entity.path);
+      if (name.startsWith('.')) continue; // hidden files/folders
+      if (entity is Directory) {
+        if (_wholeComputerSkipDirs.contains(name.toLowerCase())) continue;
+        await _scanTreeSkippingNoise(entity, found, onProgress, depth: depth + 1);
+      } else if (entity is File) {
+        final ext = p.extension(entity.path).replaceFirst('.', '').toLowerCase();
+        if (kAudioExtensions.contains(ext)) {
+          found.add(entity.path);
+          onProgress?.call(found.length);
+        }
+      }
+    }
   }
 
   /// Best-effort title from a bare filename: strip the extension, swap
@@ -107,15 +205,16 @@ class LocalFileService {
   /// files. For a personal music library that's the safer default; ask if
   /// you'd rather trade that for security-scoped bookmarks instead.
   ///
-  /// Tag reading goes through the `audiotags` package, the one new
-  /// dependency this needs — its exact API surface is the least-certain
-  /// part of this change (this project has never been through a real Dart
-  /// compiler here — see README). If `flutter pub get` or the build fails
-  /// specifically on `audiotags`, paste the error back and it'll get fixed
-  /// the same way everything else in this repo has been: from the real
-  /// compiler output. Runtime failures (a file with corrupt/missing tags)
-  /// are already handled — this falls back to the filename-derived title
-  /// rather than failing the whole import.
+  /// Tag reading goes through `audio_metadata_reader` — pure Dart, no
+  /// native/FFI bridge on any platform. This project originally used
+  /// `audiotags`, which turned out to have a real, long-open,
+  /// maintainer-unresponsive bug that broke every macOS and iOS build (a
+  /// mismatch between its bundled native header and its compiled library —
+  /// see pubspec.yaml's dependency comment for the issue links). Switching
+  /// packages removes that entire failure class rather than working around
+  /// it. Runtime failures (a file with corrupt/missing tags, or a format
+  /// this package can't parse) are handled below — this falls back to the
+  /// filename-derived title rather than failing the whole import.
   Future<ImportedAudioFile> importFile(String originalPath) async {
     final id = idForLocalPath(originalPath);
     final ext = p.extension(originalPath);
@@ -135,44 +234,44 @@ class LocalFileService {
     String? artworkPath;
 
     try {
-      final tag = await AudioTags.read(storedFile.path);
-      if (tag != null) {
-        if ((tag.title ?? '').trim().isNotEmpty) title = tag.title!.trim();
-        if ((tag.trackArtist ?? '').trim().isNotEmpty) artist = tag.trackArtist!.trim();
-        if ((tag.album ?? '').trim().isNotEmpty) album = tag.album!.trim();
-        if ((tag.genre ?? '').trim().isNotEmpty) genre = tag.genre!.trim();
-        if (tag.duration != null) durationMs = tag.duration! * 1000;
+      // readMetadata is synchronous (not a Future) — audio_metadata_reader
+      // parses the file directly rather than round-tripping through a
+      // native/FFI call. getImage:true is required to actually populate
+      // `pictures` below; it defaults to false (skipped) otherwise.
+      final tag = readMetadata(storedFile, getImage: true);
+      if ((tag.title ?? '').trim().isNotEmpty) title = tag.title!.trim();
+      if ((tag.artist ?? '').trim().isNotEmpty) artist = tag.artist!.trim();
+      if ((tag.album ?? '').trim().isNotEmpty) album = tag.album!.trim();
+      if (tag.genres.isNotEmpty) genre = tag.genres.join(', ');
+      if (tag.duration != null) durationMs = tag.duration!.inMilliseconds;
 
-        if (tag.pictures.isNotEmpty) {
-          final pic = tag.pictures.first;
-          // Real compiler error from a real build (thank you for pasting it
-          // back): audiotags 1.4.5's Picture.mimeType isn't a String, it's
-          // a generated `MimeType?` enum (audiotags is flutter_rust_bridge-
-          // backed — see the package's picture.dart), so .contains() never
-          // existed. .toString() is defined on every Dart type (including
-          // null, via Object?), so this works regardless of MimeType's
-          // actual shape without needing to guess its real API — an enum's
-          // default toString() is "MimeType.png" style, which still
-          // contains "png" for a PNG picture.
-          final mimeText = pic.mimeType.toString().toLowerCase();
-          // Cap embedded artwork at 8MB before writing — a defensive bound
-          // against a maliciously/oddly tagged file dumping an oversized
-          // blob into app storage (found during a security review; low
-          // risk since the "attacker" is whoever's importing their own
-          // file, but free to add).
-          if (pic.bytes.length <= 8 * 1024 * 1024) {
-            final artDir = await _ensureSubdir('artwork');
-            final artExt = mimeText.contains('png') ? '.png' : '.jpg';
-            final artFile = File(p.join(artDir.path, '$id$artExt'));
-            await artFile.writeAsBytes(pic.bytes, flush: true);
-            artworkPath = artFile.path;
-          }
+      if (tag.pictures.isNotEmpty) {
+        final pic = tag.pictures.first;
+        // Cap embedded artwork at 8MB before writing — a defensive bound
+        // against a maliciously/oddly tagged file dumping an oversized
+        // blob into app storage (found during a security review; low
+        // risk since the "attacker" is whoever's importing their own
+        // file, but free to add).
+        if (pic.bytes.length <= 8 * 1024 * 1024) {
+          final artDir = await _ensureSubdir('artwork');
+          // pic.mimetype (audio_metadata_reader's actual field name, lower-
+          // case 't') is a plain String like "image/png"/"image/jpeg" —
+          // unlike audiotags' generated MimeType enum, this needs no
+          // toString() workaround to inspect.
+          final artExt = pic.mimetype.toLowerCase().contains('png') ? '.png' : '.jpg';
+          final artFile = File(p.join(artDir.path, '$id$artExt'));
+          await artFile.writeAsBytes(pic.bytes, flush: true);
+          artworkPath = artFile.path;
         }
       }
+    } on MetadataParserException {
+      // No usable tags, or this file type isn't one the package can parse
+      // (covers both NoMetadataParserException and a parse failure on a
+      // corrupt file) — keep the filename-derived fallbacks above rather
+      // than failing the whole import over missing metadata.
     } catch (_) {
-      // No usable tags (or this file type/audiotags version doesn't support
-      // reading it) — keep the filename-derived fallbacks above rather than
-      // failing the import over missing metadata.
+      // Any other unexpected failure reading tags — same fallback; a bad
+      // tag block in one file shouldn't fail the import.
     }
 
     return ImportedAudioFile(

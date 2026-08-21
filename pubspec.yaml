@@ -35,10 +35,16 @@ dependencies:
   # Local file import (desktop/mobile only — gated behind kIsWeb)
   file_picker: ^8.1.2
   # Reads embedded ID3/FLAC/MP4 tags (title/artist/album/genre/cover art) on
-  # import — this is the one dependency in this project whose exact API was
-  # never checked against a real compiler; see local_file_service.dart's
-  # importFile() doc comment if `flutter pub get`/build fails on this specifically.
-  audiotags: ^1.3.1
+  # import. This project originally used `audiotags`, which turned out to
+  # have a real, long-open, maintainer-unresponsive bug breaking every
+  # macOS/iOS build (github.com/erikas-taroza/audiotags issues #14/#21/#34 —
+  # a flutter_rust_bridge v1/v2 symbol mismatch between its bundled native
+  # header and its compiled library, independent of CPU architecture, so
+  # restricting the build to one architecture never could have fixed it).
+  # Switched to audio_metadata_reader instead — pure Dart, no native/FFI
+  # bridge at all, so this entire class of platform-linking failure isn't
+  # possible with it. See local_file_service_io.dart's importFile().
+  audio_metadata_reader: ^1.7.1
 
   # Auth
   google_sign_in: ^6.2.1

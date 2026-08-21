@@ -205,15 +205,34 @@ class LibraryController extends StateNotifier<LibraryState> {
     return _importPaths(paths);
   }
 
-  /// Quick-scan the OS's known Music folder (desktop only — see
-  /// LocalFileService.platformMusicFolder for why this, not a literal
-  /// whole-disk crawl, is what "auto scan for music" means here). Returns
-  /// null if there's no such folder on this platform/machine.
+  /// Quick-scan the OS's known Music folder (desktop only) — the fast,
+  /// common-case option. Returns null if there's no such folder on this
+  /// platform/machine. For an actual whole-disk crawl, see
+  /// scanWholeComputer below.
   Future<ImportResult?> scanPlatformMusicFolder() async {
     if (kIsWeb) return null;
     final folder = await localFiles.platformMusicFolder();
     if (folder == null) return null;
     final paths = await localFiles.scanFolderForAudio(folder);
+    return _importPaths(paths);
+  }
+
+  /// A real, literal whole-computer scan — every user-accessible drive/
+  /// volume the OS exposes, not just the Music folder. Desktop only: on
+  /// Android/iOS this isn't a filesystem-crawl problem at all — most audio
+  /// files live behind MediaStore (Android) or the Photos-library-style
+  /// picker (iOS), not a plain accessible path the way desktop files are,
+  /// so a "scan the whole phone" feature needs a real platform-integration
+  /// package (e.g. on_audio_query on Android) rather than this method —
+  /// deliberately not attempted here without verifying that package's
+  /// actual API first, the same lesson this app's audiotags/CI failures
+  /// already taught the hard way (see README's "Known limitations"). Slower
+  /// than the Music-folder scan by nature (it's walking far more of the
+  /// disk) — [onProgress], if given, is called with a running found-count
+  /// so the UI can show live progress instead of an indefinite spinner.
+  Future<ImportResult?> scanWholeComputer({void Function(int foundSoFar)? onProgress}) async {
+    if (kIsWeb) return null;
+    final paths = await localFiles.scanWholeComputer(onProgress: onProgress);
     return _importPaths(paths);
   }
 

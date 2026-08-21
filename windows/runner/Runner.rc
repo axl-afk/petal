@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.axltech" "\0"
+            VALUE "CompanyName", "com.axl" "\0"
             VALUE "FileDescription", "petal" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "petal" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.axltech. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.axl. All rights reserved." "\0"
             VALUE "OriginalFilename", "petal.exe" "\0"
             VALUE "ProductName", "petal" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

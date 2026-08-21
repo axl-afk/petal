@@ -550,16 +550,18 @@ covers about credentials:
   fine with the direct `uc?export=download` URL.
 - **Local file metadata & artwork come from real tags**: title, artist,
   album, genre, duration, and cover art are read from embedded ID3/MP4/FLAC
-  tags via the `audiotags` package. A real build caught one API mismatch
-  here — `Picture.mimeType` is a generated enum (`MimeType?`), not a
-  `String`, so `local_file_service_io.dart` now inspects it via
-  `.toString()` rather than calling `String` methods on it directly — fixed
-  and no longer expected to recur, but this remains the one dependency
-  whose full API surface hasn't been exercised by a real compiler run in
-  this environment, so if `flutter pub get`/`flutter run` throws any other
-  error mentioning `audiotags` or `AudioTags`, paste it back. If a file has
-  no tags at all, Petal falls back to a filename-derived title and the
-  plain placeholder icon rather than failing the import.
+  tags via the `audio_metadata_reader` package — pure Dart, no native/FFI
+  bridge. This project originally used `audiotags` instead, which turned
+  out to have a real, long-open, maintainer-unresponsive bug that broke
+  every macOS and iOS build (github.com/erikas-taroza/audiotags issues
+  #14/#21/#34 — its bundled native library was compiled against a different
+  `flutter_rust_bridge` ABI version than the header it ships, so a handful
+  of bridge symbols like `_wire_read`/`_new_box_autoadd_*` were always
+  undefined at link time, on any architecture). Switching to a pure-Dart
+  package removes that whole failure class rather than working around it.
+  If a file has no tags at all, or `audio_metadata_reader` can't parse it,
+  Petal falls back to a filename-derived title and the plain placeholder
+  icon rather than failing the import.
 - **Imported local files are copied, not linked**: picking a file (or
   scanning a folder) copies it into Petal's own app-support storage rather
   than just remembering the original path. This roughly doubles disk usage
@@ -568,14 +570,23 @@ covers about credentials:
   once the app quits unless you implement security-scoped bookmarks, which
   this version doesn't. Ask if you'd rather have bookmarks instead of the
   copy (no extra disk use, more moving parts).
-- **"Scan whole system for music" scans the OS Music folder, not the whole
-  disk**: `~/Music` (or the Windows/Linux equivalent), recursively. A
-  literal whole-filesystem crawl would be slow, would pick up unrelated
-  audio (voice memos, app caches, other users' files), and isn't something
-  any mainstream music app actually does — "Choose a folder" is there for
-  anything outside the Music folder. Android/iOS don't get this button at
-  all yet; a proper implementation there needs MediaStore/Photos-style
-  library APIs rather than raw filesystem access.
+- **Two desktop scan options, one deliberately fast and narrow, one
+  deliberately thorough and slow**: "Scan Music folder" checks just
+  `~/Music` (or the Windows/Linux equivalent), recursively — the quick
+  common-case option. "Scan whole computer" is a real whole-disk crawl
+  (every drive/volume the OS exposes), skipping hidden directories and
+  OS-owned locations that are either permission-denied for a normal user
+  anyway or never contain personal music (`Windows/Program Files`,
+  `macOS/System`+`Library`, `Linux/proc`+`sys`+`dev`, plus generic noise
+  like `node_modules`/`.git`/`.cache`) — see `scanWholeComputer` in
+  `local_file_service_io.dart`. Neither button appears on Android/iOS: most
+  audio there lives behind MediaStore (Android) or the Photos-library-style
+  picker (iOS), not a plain accessible filesystem path the way desktop
+  files are, so a "scan the whole phone" feature needs a real
+  platform-integration package (e.g. `on_audio_query` on Android) — not
+  attempted yet, specifically so as not to repeat the exact mistake that
+  caused this session's `audiotags` build failures: guessing at a native
+  package's API instead of verifying it first.
 - **Responsive scaling is a first pass, not exhaustive**: the layout now
   reads the window width and scales up text (app-wide) plus the
   highest-impact fixed dimensions — side rail, right rail, and top bar
@@ -604,36 +615,63 @@ covers about credentials:
   conceptually identical to Drive's `appDataFolder`) if you want it added.
 - **Google Drive folder import doesn't recurse into subfolders** — see
   "Google Drive folder import" above.
-- **Three CI build failures were fixed as environment/upstream-package
-  workarounds, not app source bugs, and none of them re-verified against a
-  live runner from this environment** — paste back the resulting log if any
-  of these doesn't fully resolve it:
+- **CI build failures were fixed as real build outputs came back from real
+  runners** — this project has never had its own working Flutter/Xcode/
+  Gradle toolchain available in the environment it was authored in, so
+  every one of these was diagnosed from pasted CI logs, not reproduced and
+  re-verified locally. Paste back the resulting log if any of these doesn't
+  fully resolve it:
+  - **Android**: `flutter build apk` failed at
+    `:audiotags:checkReleaseAarMetadata` (and would very plausibly have hit
+    the same wall from other plugins' AndroidX dependencies even without
+    audiotags) because the generated project compiled against android-31 —
+    modern AndroidX libraries commonly require compileSdk 34+ now.
+    `packaging/scripts/apply_packaging_snippets.py` now also sets
+    `compileSdk`/`targetSdk` to 36 in `android/app/build.gradle(.kts)`
+    (matching Google Play Console's own current target API level
+    requirement, not just "high enough for today's plugins") — **if you
+    already ran that script before this fix existed, re-run it** (safe —
+    it's idempotent) and re-commit the generated file, or CI will keep
+    hitting the same error.
+  - **macOS / iOS**: see the `audio_metadata_reader` note above — the
+    undefined-symbol linker failures on both platforms were `audiotags`,
+    not this project's code or CI config, and are gone now that it's been
+    replaced. The macOS job also no longer restricts the build to
+    Apple Silicon — that restriction was a workaround for a
+    misdiagnosis (see the note above) and has been removed, so macOS builds
+    universal (arm64+x86_64) again.
+  - **iOS signing**: separately from the above, `flutter build ios --release
+    --no-codesign` still fails with "requires a Development Team" on its
+    own, because it targets a real device, which Apple always requires
+    signing for even with `--no-codesign`. CI builds for the simulator
+    instead (`--simulator`, uploaded as `petal-ios-simulator-unsigned`) —
+    good for verifying the app builds and runs, not something you can
+    install on a physical iPhone. A real device build needs your own Apple
+    Developer Team ID wired into Xcode signing.
   - **Windows**: `flutter build windows` failed extracting a plugin's
     CMake package because the runner didn't have symlink privileges. CI now
     sets the `AllowDevelopmentWithoutDevLicense` registry key (the headless
     equivalent of turning on Developer Mode) before building.
-  - **macOS**: `audiotags`' bundled static library only ships an
-    Apple-Silicon (arm64) slice, so a default universal build fails
-    linking for x86_64. CI now builds macOS as arm64-only
-    (`FLUTTER_XCODE_ARCHS=arm64`) — a real trade-off (no Intel Mac build)
-    documented as such, not a full fix; a universal build needs `audiotags`
-    itself to ship an x86_64 slice.
-  - **iOS**: `flutter build ios --release --no-codesign` still fails with
-    "requires a Development Team" because it targets a real device, which
-    Apple always requires signing for even with `--no-codesign`. CI now
-    builds for the simulator instead (`--simulator`, uploaded as
-    `petal-ios-simulator-unsigned`) — good for verifying the app builds and
-    runs, not something you can install on a physical iPhone. A real device
-    build needs your own Apple Developer Team ID wired into Xcode signing.
+  - **Linux AppImage packaging**: `appimagetool` (itself distributed as an
+    AppImage) failed with "AppImages require FUSE to run" — GitHub's
+    `ubuntu-latest` runner (Ubuntu 24.04) doesn't preinstall FUSE, and the
+    package that provides it was renamed (`libfuse2` → `libfuse2t64`) in
+    24.04, so the commonly-cited `apt-get install libfuse2` fix doesn't even
+    apply there anymore. `build_appimage.sh` now sets
+    `APPIMAGE_EXTRACT_AND_RUN=1` instead, which makes appimagetool
+    self-extract and run without needing FUSE at all — sidesteps the
+    package-name churn entirely rather than chasing it.
 
 ## What each package is doing here
 
 `flutter_riverpod` (state), `drift` + `sqlite3_flutter_libs` (database),
 `just_audio` + `just_audio_web` + `audio_session` (playback), `file_picker`
-(local import, gated off on web), `audiotags` (reads embedded title/
-artist/album/genre/duration/cover-art tags from imported local files —
-the least battle-tested *dependency* here, see "Known limitations" above),
-`crypto` (OAuth state, hashing a local file's path or a pasted cloud link
+(local import, gated off on web), `audio_metadata_reader` (pure-Dart —
+reads embedded title/artist/album/genre/duration/cover-art tags from
+imported local files; replaced `audiotags` after that package's native
+library turned out to have a real, unresolved macOS/iOS linking bug — see
+"Known limitations" above), `crypto` (OAuth state, hashing a local file's
+path or a pasted cloud link
 into a stable library ID so re-importing/re-pasting the same thing updates
 it instead of duplicating it, and the deterministic ids that Google Drive
 library backup keys off of), `google_sign_in` + `flutter_web_auth_2`

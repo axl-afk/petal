@@ -18,6 +18,7 @@ class LocalFileService {
   Future<String?> pickAudioFolder() async => null;
   Future<List<String>> scanFolderForAudio(String folderPath) async => [];
   Future<String?> platformMusicFolder() async => null;
+  Future<List<String>> scanWholeComputer({void Function(int foundSoFar)? onProgress}) async => [];
   String titleFromFileName(String fileName) => fileName;
 
   Future<ImportedAudioFile> importFile(String originalPath) async =>
