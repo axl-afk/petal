@@ -1,4 +1,5 @@
 # Project-level configuration.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 cmake_minimum_required(VERSION 3.14)
 project(petal LANGUAGES CXX)
 
