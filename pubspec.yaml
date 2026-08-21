@@ -33,7 +33,7 @@ dependencies:
   audio_session: ^0.1.21
 
   # Local file import (desktop/mobile only — gated behind kIsWeb)
-  file_picker: ^8.1.2
+  file_picker: 8.3.7
   # Reads embedded ID3/FLAC/MP4 tags (title/artist/album/genre/cover art) on
   # import. This project originally used `audiotags`, which turned out to
   # have a real, long-open, maintainer-unresponsive bug breaking every
@@ -125,3 +125,6 @@ flutter_launcher_icons:
     image_path: "assets/icon/icon_square.png"
     background_color: "#F0F7FF"
     theme_color: "#F0F7FF"
+dependency_overrides:
+  file_picker:
+    path: packages/file_picker
