@@ -200,9 +200,12 @@ iOS/Android/macOS/web.
 1. https://console.cloud.google.com/ → create/select a project.
 2. APIs & Services → OAuth consent screen → External → fill in the app
    name/email → under Scopes, add `.../auth/userinfo.email`,
-   `.../auth/userinfo.profile`, and `https://www.googleapis.com/auth/drive.appdata`
-   → under Test users, add your own Google account (keeps you off the
-   "unverified app" block while testing).
+   `.../auth/userinfo.profile`, `https://www.googleapis.com/auth/drive.appdata`,
+   and `https://www.googleapis.com/auth/drive.readonly` → under Test users,
+   add your own Google account (keeps you off the "unverified app" block
+   while testing). The last scope is a meaningfully bigger permission grant
+   than the other three — see "Google Drive folder import" below for why
+   it's needed and what it actually lets Petal see.
 3. APIs & Services → Library → search "Google Drive API" → Enable (needed
    for the library backup feature to work at all).
 4. APIs & Services → Credentials → Create Credentials → OAuth client ID →
@@ -230,9 +233,34 @@ lot more plumbing). It authenticates your identity, and Petal uses that
 identity to remember which Drive/OneDrive *links you've pasted* — so
 signing in on a new device/reinstall re-resolves and reconnects those same
 links automatically, matching "set up your drive links once, don't do it
-again." Google sign-in specifically requests one extra, narrow scope
-(`drive.appdata`) beyond identity — see the next section for what that's
-for.
+again." Google sign-in specifically requests two extra scopes beyond
+identity: the narrow `drive.appdata` (see the next section) and the
+broader `drive.readonly` (see "Google Drive folder import" below).
+
+## Google Drive folder import
+
+Pasting a single song's share link has always worked as a plain URL
+rewrite (see `LinkResolverService`) — no OAuth involved, works whether
+you're signed in or not, same as before. Pasting a whole **folder** link
+(`drive.google.com/drive/folders/...`) is different: listing what's
+*inside* a folder isn't something a public URL can do, so it requires an
+actual signed-in Google account and a real Drive API call
+(`DriveFolderService.listAudioFiles`). Paste either shape into the same
+box on Add Source — Petal tells them apart automatically
+(`LinkResolverService.driveFolderId`) and imports every audio file found
+directly inside the folder, skipping anything that isn't an audio
+extension.
+
+Two things worth knowing:
+- **This is why the `drive.readonly` scope exists.** Listing folder
+  contents needs read access to the parts of your actual Drive you choose
+  to share this way — a meaningfully bigger ask than `drive.appdata`'s
+  single hidden file. Declined that scope, or not signed in at all? Folder
+  links fail with a clear message telling you to sign in first; single-file
+  links are unaffected either way.
+- **Subfolders aren't scanned (v1 scope)** — only files directly inside the
+  folder you link. Move files up a level, or share the specific subfolder
+  instead, if what you meant to import is nested.
 
 ## How library backup works (Google accounts only)
 
@@ -273,6 +301,88 @@ status code, paste it back. And `drive.appdata` is a "sensitive" scope on
 Google's OAuth consent screen — until you verify your app in Google Cloud
 Console, anyone who isn't added as a test user on your project will see an
 "unverified app" warning when they try to sign in.
+
+## Releasing a new version
+
+This assumes the one-time setup above (`flutter create .`, packaging
+snippets applied, platform folders committed) is already done and
+`.github/workflows/build.yml` builds cleanly on a normal push to `main`.
+
+**1. Get this code onto GitHub, if it isn't already:**
+
+```bash
+cd petal_src
+git init                      # skip if this is already a git repo
+git add -A
+git commit -m "Petal v1"      # skip if you already have commits
+gh repo create petal --public --source=. --remote=origin --push
+# no gh CLI? create an empty repo on github.com instead, then:
+#   git remote add origin https://github.com/<you>/petal.git
+#   git branch -M main
+#   git push -u origin main
+```
+
+**2. Confirm everything actually works before releasing anything:**
+push (or `workflow_dispatch` from the Actions tab) and watch the **Build
+Petal** workflow run. Six jobs build in parallel — android, web, windows,
+macos, ios, linux. A green check on all six means every platform compiled
+and produced a downloadable artifact on that run's Summary page; a red X
+means the platform failed and the *next* step (attaching it to a public
+Release) isn't safe to do yet for that platform specifically — open the
+failed job's log and paste the error back rather than releasing around it.
+`flutter analyze` and `flutter test` locally (if you have Flutter
+installed on your own machine) catch most other issues faster than waiting
+on CI.
+
+**3. Tag a version to publish it as a public GitHub Release:**
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+That tag push re-runs all six build jobs, then a seventh `release` job
+downloads every platform's output, packages the ones that are a raw folder
+(web, and a "portable" zip for windows/linux) into a single file each, and
+publishes everything as a GitHub Release on your repo's Releases page —
+`.apk`/`.aab` for Android, a `.zip` for web, `.exe` installer + a portable
+`.zip` for Windows, `.dmg`/`.pkg` for macOS, a `.zip` of the simulator
+`.app` for iOS, and an `.AppImage` + portable `.zip` for Linux. That
+Release page's URL is the actual "someone downloads this and installs it"
+link — share that, not the raw source repo. Push a new tag (`v1.0.1`, …)
+for every future release; this workflow was written but not exercised
+against a real GitHub Actions run in this environment, so treat the first
+tag push as a real test and paste back anything the `release` job's log
+complains about.
+
+**What "ready to go with login" means in practice.** The APK/exe/dmg/etc.
+this produces are genuinely installable and will run — but Google/Microsoft
+sign-in only works for real end users once *you've* completed two things
+that can't be automated or filled in on your behalf (see "Sign-in setup"
+above): your own OAuth client ID pasted into `auth_config.dart`, and —
+specifically for a *public* release, not just yourself testing — clicking
+"Publish app" on Google's OAuth consent screen (or getting it verified, if
+you kept the sensitive Drive scopes, which this app does). Skip that
+second part and every user besides the test accounts you listed will hit
+an "unverified app" block, not a working sign-in button.
+
+**Beyond GitHub Releases** — actual app store listings (Google Play, Apple
+App Store, Microsoft Store) get you discoverability and auto-updates, but
+each is its own separate, longer process this workflow doesn't attempt:
+Play Store needs a $25 one-time Play Console account, an upload keystore
+you generate and keep forever (losing it means you can never update that
+app listing again), and — as of the Play Console's current policy — a
+target API level of Android 16 (API 36) for new submissions. The App Store
+needs the $99/year Apple Developer Program (free Apple IDs can build and
+run on your own devices via Xcode, but can't distribute through TestFlight
+or the App Store), a real Development Team ID wired into Xcode signing
+(replacing this workflow's `--simulator`-only iOS build), and App Store
+Connect review. Unsigned Windows/macOS builds will show a SmartScreen/
+Gatekeeper warning on first launch until you buy and wire in your own code-
+signing certificate (Windows) or Apple Developer ID + notarization (macOS)
+— annoying but not broken; users can click through it. None of this is set
+up in this project, and none of it can be, without accounts and
+credentials only you can create.
 
 ## Architecture
 
@@ -355,20 +465,101 @@ tracks a first run has:
   `progress`, so it doesn't fight the framework's layout pass on every
   position tick the way a `Row` of `AnimatedContainer`s would.
 
+A follow-up review, focused specifically on search correctness and
+efficiency, found and fixed a few more:
+
+- **Search is reactive now, not a one-shot query.** `TrackDao.search()` used
+  to be a plain `Future<List<Track>>` wrapped in `.asStream()` at the call
+  site — it ran once and never updated again, so favoriting a track,
+  re-scanning a folder, or any other DB write made while search results
+  were on screen silently went stale (the data was right, the visible list
+  just wasn't). It's now a real `.watch()`-backed `Stream`, same as every
+  other list query in the DAO, with the LIKE fallback path (used only if
+  FTS5 itself errors) properly escaping the SQL `_` wildcard too, not just
+  `%`.
+- **Search input is debounced** (`LibraryController.setSearchQuery`, 300ms)
+  instead of re-running the DB query on every keystroke — the typed text
+  still appears instantly (the search field isn't bound to this state), but
+  the actual query now waits for a short pause in typing. Switching tabs or
+  filters cancels any pending debounce, so a stale search can't overwrite a
+  filter change made while it was waiting.
+- **No more full-screen spinner flicker while searching or filtering.** The
+  Library screen's track list now passes `skipLoadingOnReload: true` to its
+  `AsyncValue.when()`, so the previous results stay visible while a new
+  query is in flight instead of being replaced by a spinner and popping
+  back — this was especially visible once search became reactive, since
+  every settled keystroke re-subscribed to a new stream.
+- **Bulk imports are one transaction, not hundreds of tiny ones.**
+  `TrackDao.upsertAll()` (used by every local file/folder import) now wraps
+  its whole batch in a single `transaction()` — faster (one commit instead
+  of one per track), and if something throws partway through a large
+  import, the batch rolls back cleanly instead of leaving the library with
+  only some of that scan's tracks and no way to tell which.
+- **The FTS sync trigger only fires on columns that matter.** `tracks_au`
+  used to run on *every* update to a track row — including favoriting and
+  lyrics caching, the two most frequent writes in the app, neither of which
+  touches a searchable field. It's now scoped to
+  `AFTER UPDATE OF title, artist, album, genre`, with a real schema
+  migration (`schemaVersion` 1 → 2) so it also applies retroactively to a
+  database created before this fix, not just fresh installs.
+
+## Security
+
+A dedicated security pass over how account data is stored and scoped
+found and fixed a few real issues, on top of what "Sign-in setup" already
+covers about credentials:
+
+- **Signing out now actually clears that account's data from the device.**
+  Local reads were never scoped by account — on a shared device, whoever
+  opened Petal next (signed out, or signed in as someone else) could still
+  see and play everything the previous Google/Microsoft account had added.
+  `AuthController.signOut` now deletes that account's tracks
+  (`TrackDao.deleteForAccount`) before clearing the session. Safe to delete:
+  Google accounts restore it from their Drive backup on next sign-in;
+  Microsoft accounts re-resolve it from `SavedSources` (kept, not deleted).
+  Purely local file imports (no owning account) are never touched.
+- **The link resolver only accepts `http`/`https` now.** A pasted link
+  reaching the audio player with an unexpected URI scheme was never
+  filtered before — now anything else is rejected with a clear error before
+  it gets anywhere near playback.
+- **OAuth access/refresh tokens are no longer persisted to disk.** Nothing
+  in the app ever read them back from storage (Google's token is always
+  freshly re-derived via silent re-auth; there's no Microsoft refresh flow
+  at all), so writing them into `shared_preferences` — unencrypted on every
+  platform this app ships to — was pure exposure with no functional
+  benefit. They still exist as in-memory fields for the current run; a
+  reloaded session now always comes back with both `null`.
+- **Embedded artwork is capped at 8MB per file** before being written to
+  disk, so a malformed or hostile audio tag can't be used to balloon local
+  storage use during an import.
+- **The web deploy's nginx config now sends real security headers** —
+  Content-Security-Policy, `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, and a `Permissions-Policy`
+  — see the comments in `deploy/web/nginx.conf` for exactly what the CSP
+  allows and why (it has to leave room for the Google Sign-In web flow and
+  direct Drive API calls). Not independently verified against a live
+  deploy from this environment — if sign-in or Drive folder import breaks
+  only on the web build after deploying this, the browser console will show
+  a CSP violation naming the exact directive to loosen.
+
 ## Known limitations (v1, honestly noted rather than silently shipped)
 
 - **Very large Google Drive files**: Drive's "can't scan this file for
   viruses" interstitial (triggered above a certain file size) needs a
   `confirm=` token that isn't handled yet. Typical audio file sizes work
   fine with the direct `uc?export=download` URL.
-- **Local file metadata & artwork now come from real tags**: title, artist,
+- **Local file metadata & artwork come from real tags**: title, artist,
   album, genre, duration, and cover art are read from embedded ID3/MP4/FLAC
-  tags via the `audiotags` package. This is the one dependency in the whole
-  project whose exact API surface hasn't been checked against a real
-  compiler — if `flutter pub get`/`flutter run` throws an error that
-  mentions `audiotags` or `AudioTags`, paste it back and it's a quick fix.
-  If a file has no tags at all, Petal falls back to a filename-derived
-  title and the plain placeholder icon rather than failing the import.
+  tags via the `audiotags` package. A real build caught one API mismatch
+  here — `Picture.mimeType` is a generated enum (`MimeType?`), not a
+  `String`, so `local_file_service_io.dart` now inspects it via
+  `.toString()` rather than calling `String` methods on it directly — fixed
+  and no longer expected to recur, but this remains the one dependency
+  whose full API surface hasn't been exercised by a real compiler run in
+  this environment, so if `flutter pub get`/`flutter run` throws any other
+  error mentioning `audiotags` or `AudioTags`, paste it back. If a file has
+  no tags at all, Petal falls back to a filename-derived title and the
+  plain placeholder icon rather than failing the import.
 - **Imported local files are copied, not linked**: picking a file (or
   scanning a folder) copies it into Petal's own app-support storage rather
   than just remembering the original path. This roughly doubles disk usage
@@ -411,6 +602,29 @@ tracks a first run has:
   model). Microsoft/OneDrive accounts don't get this yet; a similar
   mechanism exists on Microsoft Graph (an "approot" special folder,
   conceptually identical to Drive's `appDataFolder`) if you want it added.
+- **Google Drive folder import doesn't recurse into subfolders** — see
+  "Google Drive folder import" above.
+- **Three CI build failures were fixed as environment/upstream-package
+  workarounds, not app source bugs, and none of them re-verified against a
+  live runner from this environment** — paste back the resulting log if any
+  of these doesn't fully resolve it:
+  - **Windows**: `flutter build windows` failed extracting a plugin's
+    CMake package because the runner didn't have symlink privileges. CI now
+    sets the `AllowDevelopmentWithoutDevLicense` registry key (the headless
+    equivalent of turning on Developer Mode) before building.
+  - **macOS**: `audiotags`' bundled static library only ships an
+    Apple-Silicon (arm64) slice, so a default universal build fails
+    linking for x86_64. CI now builds macOS as arm64-only
+    (`FLUTTER_XCODE_ARCHS=arm64`) — a real trade-off (no Intel Mac build)
+    documented as such, not a full fix; a universal build needs `audiotags`
+    itself to ship an x86_64 slice.
+  - **iOS**: `flutter build ios --release --no-codesign` still fails with
+    "requires a Development Team" because it targets a real device, which
+    Apple always requires signing for even with `--no-codesign`. CI now
+    builds for the simulator instead (`--simulator`, uploaded as
+    `petal-ios-simulator-unsigned`) — good for verifying the app builds and
+    runs, not something you can install on a physical iPhone. A real device
+    build needs your own Apple Developer Team ID wired into Xcode signing.
 
 ## What each package is doing here
 

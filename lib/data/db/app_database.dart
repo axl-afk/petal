@@ -29,7 +29,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.withExecutor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -37,6 +37,19 @@ class AppDatabase extends _$AppDatabase {
           await m.createAll();
           await _createFts();
           await _createIndices();
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            // Re-scope the tracks_au trigger (see _createFts's doc comment)
+            // to only fire on the columns tracks_fts actually indexes,
+            // instead of on every write to the tracks table. An install
+            // that already created its DB under schema 1 has this trigger
+            // under the same name already, so _createFts's own `CREATE
+            // TRIGGER IF NOT EXISTS` would silently never apply the fix —
+            // drop it explicitly first so the recreate actually takes.
+            await customStatement('DROP TRIGGER IF EXISTS tracks_au');
+            await _createFts();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -81,8 +94,16 @@ class AppDatabase extends _$AppDatabase {
       END;
     ''');
 
+    // Scoped to just the columns tracks_fts actually indexes (`OF title,
+    // artist, album, genre`) rather than firing on every UPDATE — a review
+    // caught that, unscoped, this trigger did a full FTS delete+reinsert on
+    // every single write to the tracks table, including the two most
+    // frequent ones in the app (TrackDao.setFavorite and .cacheLyrics),
+    // neither of which touches a searchable column at all. Those writes now
+    // skip the trigger entirely; a real title/artist/album/genre edit (a
+    // re-scan updating tags — see upsertAll) still fires it correctly.
     await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS tracks_au AFTER UPDATE ON tracks BEGIN
+      CREATE TRIGGER IF NOT EXISTS tracks_au AFTER UPDATE OF title, artist, album, genre ON tracks BEGIN
         INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album, genre)
         VALUES('delete', old.rowid, old.title, old.artist, old.album, old.genre);
         INSERT INTO tracks_fts(rowid, title, artist, album, genre)

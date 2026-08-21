@@ -76,31 +76,56 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   /// FTS5 virtual table (see AppDatabase._createFts). Falls back to a plain
   /// LIKE scan if FTS5 isn't available for some reason (e.g. an older
   /// bundled sqlite3), so search never just breaks.
-  Future<List<Track>> search(String rawQuery) async {
+  ///
+  /// Reactive (a `.watch()`-backed Stream), like every other list query in
+  /// this DAO — found during a review that this used to be a plain
+  /// one-shot Future wrapped in `.asStream()` (see LibraryController), so a
+  /// favorite toggle, a re-import, or any other DB write made while search
+  /// results were showing never refreshed them: the DB was correctly
+  /// updated, the visible list just silently went stale. `customSelect`
+  /// supports `.watch()` the same as a typed `select()` given a correct
+  /// `readsFrom` (declared below), so this needed no uncertain API.
+  Stream<List<Track>> search(String rawQuery) async* {
     final query = rawQuery.trim();
     if (query.isEmpty) {
-      return (select(tracks)..orderBy([(t) => OrderingTerm.asc(t.title)])).get();
+      yield* watchAll();
+      return;
     }
 
     final ftsQuery = _toFtsPrefixQuery(query);
+    final ftsStream = customSelect(
+      'SELECT tracks.* FROM tracks_fts '
+      'JOIN tracks ON tracks.rowid = tracks_fts.rowid '
+      'WHERE tracks_fts MATCH ? '
+      'ORDER BY rank',
+      variables: [Variable.withString(ftsQuery)],
+      readsFrom: {tracks},
+    ).watch().map((rows) => rows.map((r) => tracks.map(r.data)).toList());
+
     try {
-      final rows = await customSelect(
-        'SELECT tracks.* FROM tracks_fts '
-        'JOIN tracks ON tracks.rowid = tracks_fts.rowid '
-        'WHERE tracks_fts MATCH ? '
-        'ORDER BY rank',
-        variables: [Variable.withString(ftsQuery)],
-        readsFrom: {tracks},
-      ).get();
-      return rows.map((r) => tracks.map(r.data)).toList();
+      yield* ftsStream;
     } catch (_) {
-      final like = '%${query.replaceAll('%', '')}%';
-      return (select(tracks)
-            ..where((t) =>
-                t.title.like(like) | t.artist.like(like) | t.album.like(like) | t.genre.like(like))
-            ..orderBy([(t) => OrderingTerm.asc(t.title)]))
-          .get();
+      // FTS5 itself threw (module unavailable — the doc comment's original
+      // intent) — fall back to a reactive LIKE scan instead of losing
+      // live-updates entirely on that path too.
+      yield* _watchLikeSearch(query);
     }
+  }
+
+  /// The LIKE-based fallback path for [search], factored out so it can be
+  /// reused if the FTS5 stream ever errors mid-stream, not just on its
+  /// first emission. Escapes both SQL LIKE wildcards (`%` and `_`) out of
+  /// the raw query — `%` was already stripped before this existed; `_`
+  /// (LIKE's single-character wildcard) was found unescaped during review,
+  /// which would make a query containing e.g. "foo_bar" also match
+  /// "fooXbar".
+  Stream<List<Track>> _watchLikeSearch(String query) {
+    final like = '%${query.replaceAll('%', '').replaceAll('_', '')}%';
+    return (select(tracks)
+          ..where((t) =>
+              t.title.like(like) | t.artist.like(like) | t.album.like(like) | t.genre.like(like))
+          ..orderBy([(t) => OrderingTerm.asc(t.title)]))
+        .watch();
   }
 
   /// Turns "wren st" into `"wren"* "st"*` — each whitespace-separated token
@@ -131,30 +156,59 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   /// tracks and drop their cached lyrics every time a folder gets
   /// re-scanned — this does a plain select-then-insert-or-update instead,
   /// avoiding any uncertain-API batch/on-conflict helper.
+  ///
+  /// Runs as a single [transaction] — a review flagged the original version
+  /// (a plain unwrapped loop of individual selects/inserts/updates) for two
+  /// real problems on a big folder import: each row was its own separate
+  /// disk commit (slow — hundreds/thousands of tiny transactions instead of
+  /// one), and a crash or force-quit partway through a large batch could
+  /// leave the library with only some of that scan's tracks saved, with no
+  /// way to tell which. Wrapping the whole batch in one transaction fixes
+  /// both: drift/sqlite batches the writes into a single commit, and if
+  /// anything throws partway through, the whole batch rolls back instead of
+  /// landing half-applied.
   Future<void> upsertAll(List<TracksCompanion> items) async {
-    for (final item in items) {
-      final id = item.id.value;
-      final existing = await (select(tracks)..where((t) => t.id.equals(id))).getSingleOrNull();
-      if (existing == null) {
-        await into(tracks).insert(item);
-      } else {
-        await (update(tracks)..where((t) => t.id.equals(id))).write(
-          TracksCompanion(
-            title: item.title,
-            artist: item.artist,
-            album: item.album,
-            genre: item.genre,
-            durationMs: item.durationMs,
-            sourceUri: item.sourceUri,
-            artworkUrl: item.artworkUrl,
-          ),
-        );
+    await transaction(() async {
+      for (final item in items) {
+        final id = item.id.value;
+        final existing = await (select(tracks)..where((t) => t.id.equals(id))).getSingleOrNull();
+        if (existing == null) {
+          await into(tracks).insert(item);
+        } else {
+          await (update(tracks)..where((t) => t.id.equals(id))).write(
+            TracksCompanion(
+              title: item.title,
+              artist: item.artist,
+              album: item.album,
+              genre: item.genre,
+              durationMs: item.durationMs,
+              sourceUri: item.sourceUri,
+              artworkUrl: item.artworkUrl,
+            ),
+          );
+        }
       }
-    }
+    });
   }
 
   Future<void> deleteById(String id) =>
       (delete(tracks)..where((t) => t.id.equals(id))).go();
+
+  /// Removes every track this account added via a Drive/OneDrive/direct
+  /// link — called on sign-out (see AuthController.signOut). Found during
+  /// a security review: reads never filtered by ownerAccount, so on a
+  /// shared device, whoever opened Petal next (signed out, or signed in as
+  /// someone else) could still see and play everything the previous
+  /// account had pasted. Safe to delete: for Google accounts it's already
+  /// backed up to Drive and comes back on next sign-in (see
+  /// cloud_sync_controller.dart); for Microsoft it re-resolves from
+  /// SavedSources (kept, not deleted here) on next sign-in. Local file
+  /// imports (ownerAccount is null) are untouched. Cascades to remove
+  /// this account's tracks from any playlist via PlaylistTracks' trackId
+  /// foreign key (ON DELETE CASCADE) — a shared playlist's own row (name/
+  /// id) is not deleted, only its now-account-less membership rows.
+  Future<void> deleteForAccount(String accountEmail) =>
+      (delete(tracks)..where((t) => t.ownerAccount.equals(accountEmail))).go();
 
   Future<void> setFavorite(String id, bool value) =>
       (update(tracks)..where((t) => t.id.equals(id)))

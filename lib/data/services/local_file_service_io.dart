@@ -145,11 +145,28 @@ class LocalFileService {
 
         if (tag.pictures.isNotEmpty) {
           final pic = tag.pictures.first;
-          final artDir = await _ensureSubdir('artwork');
-          final artExt = pic.mimeType.contains('png') ? '.png' : '.jpg';
-          final artFile = File(p.join(artDir.path, '$id$artExt'));
-          await artFile.writeAsBytes(pic.bytes, flush: true);
-          artworkPath = artFile.path;
+          // Real compiler error from a real build (thank you for pasting it
+          // back): audiotags 1.4.5's Picture.mimeType isn't a String, it's
+          // a generated `MimeType?` enum (audiotags is flutter_rust_bridge-
+          // backed — see the package's picture.dart), so .contains() never
+          // existed. .toString() is defined on every Dart type (including
+          // null, via Object?), so this works regardless of MimeType's
+          // actual shape without needing to guess its real API — an enum's
+          // default toString() is "MimeType.png" style, which still
+          // contains "png" for a PNG picture.
+          final mimeText = pic.mimeType.toString().toLowerCase();
+          // Cap embedded artwork at 8MB before writing — a defensive bound
+          // against a maliciously/oddly tagged file dumping an oversized
+          // blob into app storage (found during a security review; low
+          // risk since the "attacker" is whoever's importing their own
+          // file, but free to add).
+          if (pic.bytes.length <= 8 * 1024 * 1024) {
+            final artDir = await _ensureSubdir('artwork');
+            final artExt = mimeText.contains('png') ? '.png' : '.jpg';
+            final artFile = File(p.join(artDir.path, '$id$artExt'));
+            await artFile.writeAsBytes(pic.bytes, flush: true);
+            artworkPath = artFile.path;
+          }
         }
       }
     } catch (_) {

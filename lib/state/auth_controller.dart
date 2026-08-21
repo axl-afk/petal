@@ -65,9 +65,16 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
-    final kind = state.session?.provider;
-    if (kind == AuthProviderKind.google) await _google.signOut();
-    if (kind == AuthProviderKind.microsoft) await _microsoft.signOut();
+    final session = state.session;
+    if (session?.provider == AuthProviderKind.google) await _google.signOut();
+    if (session?.provider == AuthProviderKind.microsoft) await _microsoft.signOut();
+    // Security review finding: local reads were never scoped by account, so
+    // on a shared device the next person to open Petal — signed out, or
+    // signed in as someone else — could still see and play every Drive/
+    // OneDrive link this account had added. See TrackDao.deleteForAccount.
+    if (session != null) {
+      await _ref.read(libraryControllerProvider.notifier).clearAccountData(session.email);
+    }
     await _prefs.clearSession();
     state = const AuthState();
   }

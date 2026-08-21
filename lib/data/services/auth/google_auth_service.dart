@@ -30,6 +30,17 @@ class GoogleAuthService implements AuthProviderService {
         // Console, sign-in will show an "unverified app" warning to anyone
         // who isn't added as a test user on your project.
         'https://www.googleapis.com/auth/drive.appdata',
+        // Read-only access to the user's actual Drive files (not just this
+        // app's hidden appdata folder above) — needed so "paste a Drive
+        // *folder* link" can list what's inside it and pull each audio file
+        // (see DriveFolderService, LibraryController._connectDriveFolder).
+        // This is a meaningfully bigger permission grant than drive.appdata
+        // alone: the account is asked to let Petal see file names/contents
+        // across their whole Drive, not just its own private blob. Google's
+        // consent screen will flag this as sensitive the same way appdata
+        // is — see the note above and README's "Sign-in setup" section,
+        // which documents this explicitly so it isn't a surprise.
+        'https://www.googleapis.com/auth/drive.readonly',
       ],
       clientId: AuthConfig.googleConfigured ? AuthConfig.googleWebClientId : null,
     );

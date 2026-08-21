@@ -1,3 +1,5 @@
+import 'dart:async' show Timer;
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,8 @@ import '../data/db/daos/track_dao.dart';
 import '../data/db/tables.dart';
 import '../data/models/auth_session.dart' show AuthProviderKind;
 import '../data/models/resolved_source.dart';
+import '../data/services/auth/google_auth_service.dart';
+import '../data/services/drive_folder_service.dart';
 import '../data/services/link_resolver_service.dart';
 import '../data/services/local_file_service.dart';
 import '../utils/id_gen.dart';
@@ -64,10 +68,37 @@ class LibraryController extends StateNotifier<LibraryState> {
   final SourceDao sourceDao;
   final LinkResolverService resolver;
   final LocalFileService localFiles;
+  final GoogleAuthService googleAuth;
+  final DriveFolderService driveFolder;
   final Ref _ref;
 
-  LibraryController(this.trackDao, this.playlistDao, this.sourceDao, this.resolver, this.localFiles, this._ref)
-      : super(const LibraryState());
+  // Search-quality review finding: every keystroke in the search box used
+  // to re-run the DB query immediately — on a large library this meant a
+  // full FTS/LIKE query (plus a rebuild and, per the loading-flicker note
+  // on currentTracksStreamProvider's consumer, a visible spinner) for every
+  // single character typed. Debouncing here (rather than in the TextField
+  // itself) means the typed text always appears instantly — the field in
+  // top_bar.dart isn't hooked to a controller reflecting this state, it's
+  // plain Flutter-managed text — while the actual query only runs once
+  // typing pauses.
+  Timer? _searchDebounce;
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  LibraryController(
+    this.trackDao,
+    this.playlistDao,
+    this.sourceDao,
+    this.resolver,
+    this.localFiles,
+    this.googleAuth,
+    this.driveFolder,
+    this._ref,
+  ) : super(const LibraryState());
 
   /// Kicks a debounced Google Drive backup (see cloud_sync_controller.dart)
   /// after any mutation that a signed-in Google account cares about
@@ -85,29 +116,55 @@ class LibraryController extends StateNotifier<LibraryState> {
 
   // --- navigation / filtering -------------------------------------------
 
-  void setTab(LibraryTab tab) => state = state.copyWith(tab: tab, filter: LibraryFilter.none, searchQuery: '');
+  void setTab(LibraryTab tab) {
+    _searchDebounce?.cancel();
+    state = state.copyWith(tab: tab, filter: LibraryFilter.none, searchQuery: '');
+  }
 
-  void filterByArtist(String artist) =>
-      state = state.copyWith(tab: LibraryTab.songs, filter: LibraryFilter(artist: artist));
+  void filterByArtist(String artist) {
+    _searchDebounce?.cancel();
+    state = state.copyWith(tab: LibraryTab.songs, filter: LibraryFilter(artist: artist));
+  }
 
-  void filterByGenre(String genre) =>
-      state = state.copyWith(tab: LibraryTab.songs, filter: LibraryFilter(genre: genre));
+  void filterByGenre(String genre) {
+    _searchDebounce?.cancel();
+    state = state.copyWith(tab: LibraryTab.songs, filter: LibraryFilter(genre: genre));
+  }
 
-  void filterByPlaylist(String id, String name) => state = state.copyWith(
-        tab: LibraryTab.songs,
-        filter: LibraryFilter(playlistId: id, playlistName: name),
-      );
+  void filterByPlaylist(String id, String name) {
+    _searchDebounce?.cancel();
+    state = state.copyWith(
+      tab: LibraryTab.songs,
+      filter: LibraryFilter(playlistId: id, playlistName: name),
+    );
+  }
 
-  void clearFilter() => state = state.copyWith(filter: LibraryFilter.none);
+  void clearFilter() {
+    _searchDebounce?.cancel();
+    state = state.copyWith(filter: LibraryFilter.none);
+  }
 
-  void setSearchQuery(String query) => state = state.copyWith(searchQuery: query);
+  /// Debounced: the query only actually reaches [state] (and therefore
+  /// re-runs the DB search — see currentTracksStream) 300ms after typing
+  /// pauses, not on every keystroke. setTab/clearFilter/filterBy* above each
+  /// cancel any pending timer from this method, so a stale debounced search
+  /// can never overwrite a filter or tab switch made while it was waiting.
+  void setSearchQuery(String query) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      state = state.copyWith(searchQuery: query);
+    });
+  }
 
   /// The stream the Library screen's track table subscribes to — resolves
   /// tab/filter/search into the right DAO query, so the UI never needs to
   /// know about drift directly.
   Stream<List<Track>> currentTracksStream() {
     if (state.isSearching) {
-      return trackDao.search(state.searchQuery).asStream();
+      // trackDao.search() is already a reactive Stream (see track_dao.dart)
+      // — it used to be a one-shot Future wrapped in .asStream(), which is
+      // why search results never live-updated while search was active.
+      return trackDao.search(state.searchQuery);
     }
     if (state.filter.playlistId != null) return playlistDao.watchTracks(state.filter.playlistId!);
     if (state.filter.artist != null) return trackDao.watchByArtist(state.filter.artist!);
@@ -189,14 +246,22 @@ class LibraryController extends StateNotifier<LibraryState> {
   }
 
   /// Resolves a pasted Drive/OneDrive/direct link and, on success, adds it
-  /// as a track. Returns the resolution result so the Add Source screen can
-  /// show a clear error inline instead of failing silently.
+  /// as a track — or, for a Google Drive *folder* link, imports every
+  /// audio file directly inside it (see _connectDriveFolder). Returns the
+  /// resolution result so the Add Source screen can show a clear message
+  /// inline instead of failing silently, for either shape of result
+  /// (ResolvedSource.isFolderResult distinguishes them).
   Future<ResolvedSource> connectLink({
     required String rawLink,
     required String title,
     String artist = 'Unknown Artist',
     String? accountEmail,
   }) async {
+    final folderId = resolver.driveFolderId(rawLink);
+    if (folderId != null) {
+      return _connectDriveFolder(folderId: folderId, accountEmail: accountEmail);
+    }
+
     final resolved = resolver.resolve(rawLink);
     if (!resolved.ok || resolved.playableUri == null) return resolved;
 
@@ -234,6 +299,83 @@ class LibraryController extends StateNotifier<LibraryState> {
     return resolved;
   }
 
+  /// Imports every audio file directly inside a Google Drive folder (see
+  /// LinkResolverService.driveFolderId for how a folder link is told apart
+  /// from a single-file link). Unlike a single file, listing a folder's
+  /// contents needs a real Drive API call — which needs a token, which
+  /// needs the user signed in with Google — so this fails clearly if
+  /// they're not, rather than silently doing nothing (the exact complaint
+  /// that led here: a folder link used to just fall through to "make sure
+  /// it's a single-file share link").
+  Future<ResolvedSource> _connectDriveFolder({required String folderId, String? accountEmail}) async {
+    if (accountEmail == null) {
+      return ResolvedSource.failure(
+        "That's a folder link — importing a whole folder needs you signed in with Google "
+        "first (Settings → Google), since listing what's inside it needs Drive access, not "
+        "just a direct-download URL like a single file uses. A single-file link (Share → "
+        "Copy link on one song) works either way.",
+        provider: LinkProviderKind.googleDrive,
+      );
+    }
+
+    final token = await googleAuth.refreshAccessToken();
+    if (token == null) {
+      return ResolvedSource.failure(
+        'Could not get a Google Drive access token — try signing out and back in.',
+        provider: LinkProviderKind.googleDrive,
+      );
+    }
+
+    List<DriveFolderFile> files;
+    try {
+      files = await driveFolder.listAudioFiles(token, folderId);
+    } catch (e) {
+      return ResolvedSource.failure(e.toString(), provider: LinkProviderKind.googleDrive);
+    }
+
+    if (files.isEmpty) {
+      return ResolvedSource.failure(
+        "Didn't find any audio files directly inside that folder (subfolders aren't scanned "
+        "yet — move files up a level, or share the specific subfolder instead).",
+        provider: LinkProviderKind.googleDrive,
+      );
+    }
+
+    var imported = 0;
+    for (final file in files) {
+      final fileLink = 'https://drive.google.com/file/d/${file.id}/view';
+      final resolvedFile = resolver.resolve(fileLink);
+      if (!resolvedFile.ok || resolvedFile.playableUri == null) continue;
+
+      final dot = file.name.lastIndexOf('.');
+      final title = dot > 0 ? file.name.substring(0, dot) : file.name;
+
+      await trackDao.upsert(TracksCompanion.insert(
+        id: idForCloudSource(fileLink),
+        title: title.trim().isEmpty ? 'Untitled Track' : title.trim(),
+        sourceType: TrackSourceType.googleDrive,
+        sourceUri: resolvedFile.playableUri!,
+        originUri: fileLink,
+        ownerAccount: Value(accountEmail),
+      ));
+      await sourceDao.upsertForAccount(
+        accountEmail: accountEmail,
+        provider: TrackSourceType.googleDrive,
+        rawLink: fileLink,
+        label: title,
+      );
+      imported++;
+    }
+
+    if (imported > 0) _scheduleBackupIfGoogle();
+
+    return ResolvedSource.folderSuccess(
+      provider: LinkProviderKind.googleDrive,
+      found: files.length,
+      imported: imported,
+    );
+  }
+
   /// Runs right after Microsoft sign-in (Google uses the Drive-backup path
   /// in cloud_sync_controller.dart instead — see AuthController.signIn):
   /// re-resolves every link this account has saved on this device before,
@@ -262,6 +404,10 @@ class LibraryController extends StateNotifier<LibraryState> {
   // addTrackToPlaylist (below) actually adds one.
   Future<Playlist> createPlaylist(String name) => playlistDao.create(name);
 
+  /// Called on sign-out — see TrackDao.deleteForAccount's doc comment for
+  /// why this is necessary (and safe) for a shared-device scenario.
+  Future<void> clearAccountData(String accountEmail) => trackDao.deleteForAccount(accountEmail);
+
   Future<void> addTrackToPlaylist(String playlistId, String trackId) async {
     await playlistDao.addTrack(playlistId, trackId);
     // Same reasoning as toggleFavorite above — a playlist full of purely
@@ -279,6 +425,8 @@ final libraryControllerProvider = StateNotifierProvider<LibraryController, Libra
     ref.watch(sourceDaoProvider),
     ref.watch(linkResolverServiceProvider),
     ref.watch(localFileServiceProvider),
+    ref.watch(googleAuthServiceProvider),
+    ref.watch(driveFolderServiceProvider),
     ref,
   );
 });

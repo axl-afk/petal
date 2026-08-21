@@ -7,6 +7,7 @@ import '../data/db/daos/track_dao.dart';
 import '../data/services/auth/google_auth_service.dart';
 import '../data/services/auth/microsoft_auth_service.dart';
 import '../data/services/cloud_backup_service.dart';
+import '../data/services/drive_folder_service.dart';
 import '../data/services/library_sync_service.dart';
 import '../data/services/link_resolver_service.dart';
 import '../data/services/local_file_service.dart';
@@ -28,6 +29,7 @@ final sourceDaoProvider = Provider<SourceDao>((ref) => ref.watch(appDatabaseProv
 // --- services -------------------------------------------------------------
 
 final linkResolverServiceProvider = Provider((ref) => LinkResolverService());
+final driveFolderServiceProvider = Provider((ref) => DriveFolderService());
 final lyricsServiceProvider = Provider((ref) => LyricsService());
 final localFileServiceProvider = Provider((ref) => LocalFileService());
 final googleAuthServiceProvider = Provider((ref) => GoogleAuthService());

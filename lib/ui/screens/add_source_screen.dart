@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, Tar
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/resolved_source.dart';
 import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../theme/app_theme.dart';
@@ -50,7 +51,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
     setState(() {
       _busy = false;
       if (result.ok) {
-        _success = 'Added — check Songs in your Library.';
+        _success = result.isFolderResult ? _folderResultMessage(result) : 'Added — check Songs in your Library.';
         _linkController.clear();
         _titleController.clear();
         _artistController.clear();
@@ -58,6 +59,15 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
         _error = result.error ?? 'Something went wrong resolving that link.';
       }
     });
+  }
+
+  String _folderResultMessage(ResolvedSource result) {
+    final found = result.folderFound!;
+    final imported = result.folderImported!;
+    if (imported == found) {
+      return 'Imported $imported song${imported == 1 ? '' : 's'} from that folder — check Songs in your Library.';
+    }
+    return 'Imported $imported of $found songs from that folder — the rest couldn\'t be read.';
   }
 
   Future<void> _importLocal() async {
@@ -145,7 +155,8 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
             Text('Add a source', style: petal.text.heroTitle.copyWith(fontSize: 22)),
             const SizedBox(height: 6),
             Text(
-              'Paste a public Google Drive or OneDrive share link, or import files from this device.',
+              'Paste a single-song share link, a whole Google Drive folder link (needs Google '
+              'sign-in — imports every song directly inside it), or import files from this device.',
               style: petal.text.heroSub,
             ),
             const SizedBox(height: 24),
@@ -155,7 +166,10 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Field(controller: _linkController, hint: 'https://drive.google.com/file/d/... or a OneDrive link'),
+                  _Field(
+                    controller: _linkController,
+                    hint: 'A song link, a Drive folder link (drive.google.com/drive/folders/...), or a OneDrive link',
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [

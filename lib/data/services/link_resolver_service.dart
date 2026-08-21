@@ -9,6 +9,16 @@ class LinkResolverService {
   static final _driveFileId = RegExp(r'/file/d/([a-zA-Z0-9_-]+)');
   static final _driveIdParam = RegExp(r'[?&]id=([a-zA-Z0-9_-]+)');
   static final _driveOpenPath = RegExp(r'drive\.google\.com/open');
+  static final _driveFolderId = RegExp(r'drive\.google\.com/drive/(?:u/\d+/)?folders/([a-zA-Z0-9_-]+)');
+
+  /// Returns the folder id if [rawInput] is a Google Drive *folder* share
+  /// link, or null otherwise. Checked before [resolve] in
+  /// LibraryController.connectLink — a folder doesn't resolve to one
+  /// playable URL the way a single file does; listing what's inside it
+  /// needs an actual Drive API call (see drive_folder_service.dart), which
+  /// is why folder import specifically requires being signed in with
+  /// Google, unlike a single-file link.
+  String? driveFolderId(String rawInput) => _driveFolderId.firstMatch(rawInput.trim())?.group(1);
 
   ResolvedSource resolve(String rawInput) {
     final input = rawInput.trim();
@@ -19,6 +29,15 @@ class LinkResolverService {
     final uri = Uri.tryParse(input);
     if (uri == null || !uri.hasScheme) {
       return ResolvedSource.failure("That doesn't look like a valid link.");
+    }
+    // Security review finding: only http(s) links should ever reach the
+    // player. Without this, a pasted or synced (via Drive backup) value
+    // using a local scheme (file://, content://, etc.) would fall through
+    // to the generic "direct" branch below and get handed straight to
+    // just_audio — an unintended local-resource-access path a link
+    // resolver shouldn't have.
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return ResolvedSource.failure('Only http/https links are supported.');
     }
 
     final host = uri.host.toLowerCase();

@@ -82,7 +82,19 @@ class _TrackListSection extends ConsumerWidget {
         ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
+          // skipLoadingOnReload: search-quality review finding — tab/filter/
+          // search changes all make currentTracksStreamProvider watch a new
+          // underlying DB stream (a "reload", in Riverpod's terms, since it
+          // depends on libraryControllerProvider via ref.watch). Without
+          // this, .when() briefly replaces the already-visible track list
+          // with a full-screen spinner on every one of those changes, even
+          // though the new query is normally near-instant — a visible
+          // flicker on literally every keystroke once search was made
+          // reactive. With it, the previous list stays on screen (using the
+          // AsyncValue's carried-over previous data) until the new query's
+          // first result arrives, then swaps in place.
           sliver: tracksAsync.when(
+            skipLoadingOnReload: true,
             data: (tracks) => TrackTable(tracks: tracks),
             loading: () => const SliverToBoxAdapter(
               child: Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())),
