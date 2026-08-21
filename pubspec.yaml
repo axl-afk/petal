@@ -34,6 +34,11 @@ dependencies:
 
   # Local file import (desktop/mobile only — gated behind kIsWeb)
   file_picker: ^8.1.2
+  # Reads embedded ID3/FLAC/MP4 tags (title/artist/album/genre/cover art) on
+  # import — this is the one dependency in this project whose exact API was
+  # never checked against a real compiler; see local_file_service.dart's
+  # importFile() doc comment if `flutter pub get`/build fails on this specifically.
+  audiotags: ^1.3.1
 
   # Auth
   google_sign_in: ^6.2.1
@@ -64,11 +69,15 @@ flutter:
     - assets/icon/
 
 # Generates real per-platform app icons (Android adaptive icon, iOS, macOS,
-# Windows, web favicon/manifest icons) from the monochrome petal mark in
-# assets/icon/ — run `dart run flutter_launcher_icons` after `flutter pub
-# get` and before your first release build of each platform. Source images
-# were generated to match the approved design's dark ground / white ink
-# tokens (see lib/theme/app_colors.dart).
+# Windows, web favicon/manifest icons) from assets/icon/ — run
+# `dart run flutter_launcher_icons` after `flutter pub get` and before your
+# first release build of each platform. Source images were generated from
+# the logo you provided (a rounded square, #F0F7FF background, orange music
+# note) — icon_square.png is that artwork flattened onto its own background
+# color for platforms that don't do adaptive masking (iOS/macOS/Windows/web);
+# icon_foreground.png/icon_background.png split it into Android's adaptive
+# icon layers, with the foreground scaled down so the note doesn't get
+# clipped by the circular/squircle mask Android applies.
 flutter_launcher_icons:
   image_path: "assets/icon/icon_square.png"
   android: true
@@ -87,5 +96,5 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/icon/icon_square.png"
-    background_color: "#0A0A0B"
-    theme_color: "#0A0A0B"
+    background_color: "#F0F7FF"
+    theme_color: "#F0F7FF"

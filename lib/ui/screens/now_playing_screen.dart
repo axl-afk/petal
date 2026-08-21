@@ -7,6 +7,8 @@ import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
+import '../../utils/ui_scale.dart';
+import '../widgets/track_art.dart';
 import '../widgets/waveform_seekbar.dart';
 
 class NowPlayingScreen extends ConsumerWidget {
@@ -35,11 +37,11 @@ class NowPlayingScreen extends ConsumerWidget {
             ),
           ),
           const Spacer(),
-          Container(
-            width: 220,
-            height: 220,
-            decoration: BoxDecoration(color: petal.colors.surface2, borderRadius: BorderRadius.circular(24)),
-            child: Icon(Icons.music_note, size: 64, color: petal.colors.ink3),
+          TrackArt(
+            track: track,
+            size: 220 * UiScale.of(context),
+            iconSize: 64,
+            borderRadius: BorderRadius.circular(24),
           ),
           const SizedBox(height: 28),
           Text(track.title, style: petal.text.heroTitle.copyWith(fontSize: 24), textAlign: TextAlign.center),

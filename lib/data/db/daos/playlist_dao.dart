@@ -25,8 +25,25 @@ class PlaylistDao extends DatabaseAccessor<AppDatabase> with _$PlaylistDaoMixin 
       (update(playlists)..where((p) => p.id.equals(id)))
           .write(PlaylistsCompanion(name: Value(name)));
 
-Future<void> deletePlaylist(String id) =>
-    (db.delete(playlists)..where((p) => p.id.equals(id))).go();
+  /// Creates a playlist with a caller-chosen id if one doesn't already
+  /// exist with that id — unlike [create] (which always mints its own id),
+  /// this is for cloud-backup restore (LibrarySyncService.applySnapshot),
+  /// where the id has to match what's in the pulled snapshot so playlist
+  /// membership lines up across devices.
+  Future<void> ensureExists({required String id, required String name}) async {
+    final existing = await (select(playlists)..where((p) => p.id.equals(id))).getSingleOrNull();
+    if (existing == null) {
+      await into(playlists).insert(PlaylistsCompanion.insert(id: id, name: name));
+    }
+  }
+
+  // Named deletePlaylist rather than delete — drift's DatabaseAccessor
+  // already defines a delete<T,D>(TableInfo<T,D> table) method, and a
+  // same-named override with an incompatible signature is a compile error
+  // (this broke `flutter build web` with exactly that error), and also
+  // silently hijacked removeTrack()'s call to the inherited delete() below.
+  Future<void> deletePlaylist(String id) =>
+      (db.delete(playlists)..where((p) => p.id.equals(id))).go();
 
   Stream<List<Track>> watchTracks(String playlistId) {
     final query = select(playlistTracks).join([

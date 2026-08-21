@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/auth_controller.dart';
+import '../../state/cloud_sync_controller.dart';
 import '../../state/nav_controller.dart';
+import '../../state/playback_controller.dart';
 import '../../utils/breakpoints.dart';
+import '../../utils/ui_scale.dart';
 import '../screens/add_source_screen.dart';
 import '../screens/library_screen.dart';
 import '../screens/lyrics_screen.dart';
@@ -20,6 +24,33 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final section = ref.watch(currentSectionProvider);
 
+    // Both of these are set into state already (playback_controller.dart,
+    // auth_controller.dart) but previously only ever *read* on the Settings
+    // screen and the Add Source link-resolver form — clicking "Login" from
+    // the top bar avatar, or having playback fail for any other reason,
+    // produced no visible feedback at all: the app just looked frozen.
+    // Listening here, at the one widget that's always mounted, means every
+    // failure surfaces no matter which screen triggered it.
+    ref.listen<PlaybackState>(playbackControllerProvider, (previous, next) {
+      if (next.error != null && next.error != previous?.error) {
+        _showErrorSnackBar(context, next.error!);
+      }
+    });
+    ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (next.error != null && next.error != previous?.error) {
+        _showErrorSnackBar(context, next.error!);
+      }
+    });
+    // Same idea for a failed Google Drive library backup/restore (see
+    // cloud_sync_controller.dart) — otherwise a sync failure (expired
+    // token, offline, a Drive API error) would happen silently in the
+    // background with no way to know your library didn't actually back up.
+    ref.listen<CloudSyncState>(cloudSyncControllerProvider, (previous, next) {
+      if (next.error != null && next.error != previous?.error) {
+        _showErrorSnackBar(context, 'Library backup: ${next.error!}');
+      }
+    });
+
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(
@@ -28,28 +59,48 @@ class AppShell extends ConsumerWidget {
             final isMobile = Breakpoints.isMobile(width);
             final showRail = !isMobile;
             final showRightRail = Breakpoints.isDesktop(width);
+            final scale = UiScale.forWidth(width);
 
-            return Column(
-              children: [
-                TopBar(isMobile: isMobile),
-                const Divider(height: 1),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (showRail) const SideRail(),
-                      Expanded(child: _MainContent(section: section)),
-                      if (showRightRail) const RightRail(),
-                    ],
-                  ),
+            return UiScale(
+              value: scale,
+              child: MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+                child: Column(
+                  children: [
+                    TopBar(isMobile: isMobile),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showRail) const SideRail(),
+                          Expanded(child: _MainContent(section: section)),
+                          if (showRightRail) const RightRail(),
+                        ],
+                      ),
+                    ),
+                    if (section != AppSection.nowPlaying) const MiniPlayer(),
+                  ],
                 ),
-                if (section != AppSection.nowPlaying) const MiniPlayer(),
-              ],
+              ),
             );
           },
         ),
       ),
     );
+  }
+
+  void _showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.redAccent.shade200,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
+        ),
+      );
   }
 }
 

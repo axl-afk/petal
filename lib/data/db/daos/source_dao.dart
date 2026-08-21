@@ -44,6 +44,26 @@ class SourceDao extends DatabaseAccessor<AppDatabase> with _$SourceDaoMixin {
   Future<void> remove(String id) =>
       (delete(savedSources)..where((s) => s.id.equals(id))).go();
 
+  /// Adds a saved source for this account only if it doesn't already have
+  /// one with the exact same link — used by cloud-backup restore
+  /// (LibrarySyncService.applySnapshot), which may see a link this device
+  /// already saved itself, in which case it's a no-op rather than a
+  /// duplicate row. (The normal "paste a link" flow in
+  /// LibraryController.connectLink always knows the link is new to this
+  /// account, but routes through this too now, for the same safety.)
+  Future<void> upsertForAccount({
+    required String accountEmail,
+    required TrackSourceType provider,
+    required String rawLink,
+    String? label,
+  }) async {
+    final existing = await (select(savedSources)
+          ..where((s) => s.accountEmail.equals(accountEmail) & s.rawLink.equals(rawLink)))
+        .getSingleOrNull();
+    if (existing != null) return;
+    await add(provider: provider, rawLink: rawLink, accountEmail: accountEmail, label: label);
+  }
+
   /// One-shot (non-stream) fetch used right after sign-in to decide which
   /// saved links need re-resolving into fresh Track rows.
   Future<List<SavedSource>> getForAccount(String accountEmail) =>

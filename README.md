@@ -4,6 +4,19 @@ A cross-platform music player (macOS, Windows, Linux, Android, iOS, and web)
 that plays local files or pasted Google Drive / OneDrive share links, with
 real time-synced lyrics.
 
+## License
+
+Petal is licensed under **[CC BY-NC 4.0](LICENSE)** — free to use, modify,
+and share, **for non-commercial purposes only**, as long as you credit the
+original author and link back to this repo. Full terms are in
+[`LICENSE`](LICENSE).
+
+If you redistribute Petal or a modified version of it, include a credit
+along these lines wherever you'd normally credit sources/dependencies:
+
+> Based on [Petal](https://github.com/axl-afk/petal) by Samiul Islam,
+> licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+
 ## Please read this first — how this project was built
 
 This code was written in a sandboxed environment that blocks outbound
@@ -109,6 +122,22 @@ silently wipes these edits.
 
 ### Building each target locally
 
+Building `linux` needs a few system libraries first (matches the packages
+`.github/workflows/build.yml` installs on its runner — same names on
+Debian/Ubuntu):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libwebkit2gtk-4.1-dev
+```
+
+`libwebkit2gtk-4.1-dev` specifically is needed by `desktop_webview_window`,
+a transitive dependency of `flutter_web_auth_2` — it's the embedded webview
+Linux uses for the Microsoft sign-in flow, since Linux has no equivalent to
+macOS/Windows' system-browser-callback approach. Skip it and `flutter build
+linux` fails at the CMake step with "required packages were not found:
+webkit2gtk-4.1".
+
 ```bash
 flutter build apk --release          # Android — build/app/outputs/flutter-apk/
 flutter build appbundle --release    # Android, for Play Store — .../bundle/release/
@@ -156,7 +185,10 @@ certainly why.
 
 Sign-in is real OAuth code, but it can't function until *you* register the
 app and paste in your own client ID — no working credential could be
-supplied on your behalf. Full instructions are in
+supplied on your behalf; this isn't something that can be worked around,
+since Google/Microsoft only issue a client ID to whoever registers the app
+under their own developer account, tied to your specific bundle ID/package
+name/redirect URI. Full instructions are in
 `lib/data/services/auth/auth_config.dart` at the top of the file. Until you
 do this, the sign-in buttons in Settings will show a clear "not configured"
 message rather than pretending to work. Desktop (Windows/Linux) support in
@@ -164,13 +196,83 @@ message rather than pretending to work. Desktop (Windows/Linux) support in
 package's current docs before relying on it there — it's strongest on
 iOS/Android/macOS/web.
 
+**Fastest path to a real, testable sign-in — Google, web build:**
+1. https://console.cloud.google.com/ → create/select a project.
+2. APIs & Services → OAuth consent screen → External → fill in the app
+   name/email → under Scopes, add `.../auth/userinfo.email`,
+   `.../auth/userinfo.profile`, and `https://www.googleapis.com/auth/drive.appdata`
+   → under Test users, add your own Google account (keeps you off the
+   "unverified app" block while testing).
+3. APIs & Services → Library → search "Google Drive API" → Enable (needed
+   for the library backup feature to work at all).
+4. APIs & Services → Credentials → Create Credentials → OAuth client ID →
+   type **Web application** → add an Authorized JavaScript origin matching
+   wherever you serve the build from (e.g. `http://localhost:8000` for the
+   `python3 -m http.server 8000` local-test setup in "Web build setup"
+   below) → Create.
+5. Paste the resulting `....apps.googleusercontent.com` client ID into
+   `googleWebClientId` in `auth_config.dart`.
+6. If sign-in silently does nothing on web specifically (a known
+   version-dependent quirk in `google_sign_in_web`), add
+   `<meta name="google-signin-client_id" content="YOUR_CLIENT_ID">` inside
+   `<head>` in the `web/index.html` that `flutter create .` generates —
+   this wasn't verified against a real browser in this environment, so
+   it's a "try this if it doesn't just work" note, not a guaranteed step.
+
+Android/iOS/macOS need their own platform-specific registration (SHA-1
+fingerprint, bundle ID, `GoogleService-Info.plist`) when you get to
+building those — see the numbered checklist in `auth_config.dart` for the
+full picture, including Microsoft's Azure App registration steps.
+
 Note that sign-in's job in this app is narrower than it might sound: it
-doesn't pull a file listing from Drive/OneDrive's API (that would need
-extra scopes and a lot more plumbing). It authenticates your identity, and
-Petal uses that identity to remember which Drive/OneDrive *links you've
-pasted* — so signing in on a new device/reinstall re-resolves and
-reconnects those same links automatically, matching "set up your drive
-links once, don't do it again."
+doesn't pull a file listing from Drive/OneDrive's API (that would need a
+lot more plumbing). It authenticates your identity, and Petal uses that
+identity to remember which Drive/OneDrive *links you've pasted* — so
+signing in on a new device/reinstall re-resolves and reconnects those same
+links automatically, matching "set up your drive links once, don't do it
+again." Google sign-in specifically requests one extra, narrow scope
+(`drive.appdata`) beyond identity — see the next section for what that's
+for.
+
+## How library backup works (Google accounts only)
+
+Petal doesn't run a server or a database of its own users — there's
+nothing hosted for this at all. Instead, when you sign in with Google, the
+app writes a small JSON file into a hidden, app-only folder inside *your
+own* Google Drive (Drive's "Application Data" folder — invisible in your
+normal Drive UI, and only Petal can read or write it; that's what the
+`drive.appdata` OAuth scope grants, nothing broader than that one file).
+
+What gets backed up: your saved Google Drive / OneDrive / direct links,
+which of those are favorited, and any playlists built from them. What
+doesn't: locally-imported files. Those exist as actual audio bytes only on
+the device that imported them, so there's nothing meaningful to back up
+beyond a phantom entry that couldn't play anywhere else anyway.
+
+Sync happens automatically — right after you sign in (pulling back
+anything already saved to this account, e.g. after a reinstall or on a new
+device) and a few seconds after you add a link, toggle a favorite, or edit
+a playlist while signed in. Settings shows the current backup status and a
+manual "Sync now" button.
+
+The sync model is intentionally simple, and it's worth knowing its shape:
+each sync uploads this device's complete current state, and pulling only
+ever adds/updates rows locally, never deletes. That means it's *not* a
+true multi-device merge — if you remove a saved link or playlist on one
+device, that removal won't be reflected on Drive or on another device that
+syncs later; the entry will just keep coming back. In exchange, nothing is
+ever silently lost, which felt like the better trade-off for a v1 than
+building real multi-device conflict resolution.
+
+Two more honest caveats: this is the single least-tested piece of the
+whole project — it was written directly against the Drive API v3 reference
+docs with no real Google account available in this environment to sign in
+with and exercise it end-to-end (see `cloud_backup_service.dart`'s doc
+comment), so if a sync fails with an error mentioning Drive or an HTTP
+status code, paste it back. And `drive.appdata` is a "sensitive" scope on
+Google's OAuth consent screen — until you verify your app in Google Cloud
+Console, anyone who isn't added as a test user on your project will see an
+"unverified app" warning when they try to sign in.
 
 ## Architecture
 
@@ -259,11 +361,37 @@ tracks a first run has:
   viruses" interstitial (triggered above a certain file size) needs a
   `confirm=` token that isn't handled yet. Typical audio file sizes work
   fine with the direct `uc?export=download` URL.
-- **Local file metadata**: title comes from the filename, not real ID3/MP4
-  tags. Adding a tag-reading package (e.g. `audiotags`) is a clean follow-up.
-- **No artwork fetching/rendering yet**: the schema has an `artworkUrl`
-  column and the UI has a placeholder icon slot ready for it, but nothing
-  populates or renders real album art yet.
+- **Local file metadata & artwork now come from real tags**: title, artist,
+  album, genre, duration, and cover art are read from embedded ID3/MP4/FLAC
+  tags via the `audiotags` package. This is the one dependency in the whole
+  project whose exact API surface hasn't been checked against a real
+  compiler — if `flutter pub get`/`flutter run` throws an error that
+  mentions `audiotags` or `AudioTags`, paste it back and it's a quick fix.
+  If a file has no tags at all, Petal falls back to a filename-derived
+  title and the plain placeholder icon rather than failing the import.
+- **Imported local files are copied, not linked**: picking a file (or
+  scanning a folder) copies it into Petal's own app-support storage rather
+  than just remembering the original path. This roughly doubles disk usage
+  for your imported library, but it's what makes playback survive an app
+  restart — macOS in particular revokes a picked file's read permission
+  once the app quits unless you implement security-scoped bookmarks, which
+  this version doesn't. Ask if you'd rather have bookmarks instead of the
+  copy (no extra disk use, more moving parts).
+- **"Scan whole system for music" scans the OS Music folder, not the whole
+  disk**: `~/Music` (or the Windows/Linux equivalent), recursively. A
+  literal whole-filesystem crawl would be slow, would pick up unrelated
+  audio (voice memos, app caches, other users' files), and isn't something
+  any mainstream music app actually does — "Choose a folder" is there for
+  anything outside the Music folder. Android/iOS don't get this button at
+  all yet; a proper implementation there needs MediaStore/Photos-style
+  library APIs rather than raw filesystem access.
+- **Responsive scaling is a first pass, not exhaustive**: the layout now
+  reads the window width and scales up text (app-wide) plus the
+  highest-impact fixed dimensions — side rail, right rail, and top bar
+  sizes, and artwork placeholders — on wide/4K screens. It does not yet
+  rescale every literal pixel value across every screen; if a specific
+  screen still looks cramped at your resolution, point it out and it can
+  get the same treatment.
 - **Microsoft sign-out** only clears Petal's local session — it doesn't hit
   Microsoft's `/logout` endpoint to end the browser SSO session, which is
   normal for a native/desktop OAuth flow but worth knowing.
@@ -271,13 +399,33 @@ tracks a first run has:
   pre-resolved, relying on the HTTP client to follow the redirect.
 - **Installers are unsigned** (see the packaging section above) — expected
   Gatekeeper/SmartScreen warnings until you add your own certificates.
+- **Google/Microsoft sign-in and Drive/OneDrive linking need real OAuth
+  credentials and, on macOS, the packaging snippets applied** (see
+  "Sign-in setup" above and `packaging/scripts/apply_packaging_snippets.py`).
+  Without both, sign-in fails — and now that failure shows as a visible red
+  error banner instead of silently doing nothing.
+- **Google Drive library backup is Google-only, not a true multi-device
+  merge, and the least-tested integration in the project** — see "How
+  library backup works" above for the full picture (what syncs, what
+  doesn't, and the "last full state pushed wins, no deletion propagation"
+  model). Microsoft/OneDrive accounts don't get this yet; a similar
+  mechanism exists on Microsoft Graph (an "approot" special folder,
+  conceptually identical to Drive's `appDataFolder`) if you want it added.
 
 ## What each package is doing here
 
 `flutter_riverpod` (state), `drift` + `sqlite3_flutter_libs` (database),
 `just_audio` + `just_audio_web` + `audio_session` (playback), `file_picker`
-(local import, gated off on web), `google_sign_in` + `flutter_web_auth_2`
-+ `crypto` (OAuth), `http` (lyrics + link handling), `shared_preferences`
-(session/theme only — library data always lives in the database),
-`flutter_launcher_icons` (generates real per-platform icons from
-`assets/icon/`).
+(local import, gated off on web), `audiotags` (reads embedded title/
+artist/album/genre/duration/cover-art tags from imported local files —
+the least battle-tested *dependency* here, see "Known limitations" above),
+`crypto` (OAuth state, hashing a local file's path or a pasted cloud link
+into a stable library ID so re-importing/re-pasting the same thing updates
+it instead of duplicating it, and the deterministic ids that Google Drive
+library backup keys off of), `google_sign_in` + `flutter_web_auth_2`
+(OAuth — `google_sign_in` also carries the extra `drive.appdata` scope
+that library backup runs on), `http` (lyrics + link handling, and the raw
+Drive REST API calls in `cloud_backup_service.dart` — the least
+battle-tested *code* here), `shared_preferences` (session/theme only —
+library data always lives in the database), `flutter_launcher_icons`
+(generates real per-platform icons from `assets/icon/`).

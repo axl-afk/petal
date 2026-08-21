@@ -6,6 +6,8 @@ import '../data/db/daos/source_dao.dart';
 import '../data/db/daos/track_dao.dart';
 import '../data/services/auth/google_auth_service.dart';
 import '../data/services/auth/microsoft_auth_service.dart';
+import '../data/services/cloud_backup_service.dart';
+import '../data/services/library_sync_service.dart';
 import '../data/services/link_resolver_service.dart';
 import '../data/services/local_file_service.dart';
 import '../data/services/lyrics_service.dart';
@@ -30,6 +32,16 @@ final lyricsServiceProvider = Provider((ref) => LyricsService());
 final localFileServiceProvider = Provider((ref) => LocalFileService());
 final googleAuthServiceProvider = Provider((ref) => GoogleAuthService());
 final microsoftAuthServiceProvider = Provider((ref) => MicrosoftAuthService());
+
+// Google Drive "Application Data" library backup — see
+// cloud_backup_service.dart / library_sync_service.dart / cloud_sync_controller.dart.
+final cloudBackupServiceProvider = Provider((ref) => CloudBackupService());
+final librarySyncServiceProvider = Provider((ref) => LibrarySyncService(
+      ref.watch(trackDaoProvider),
+      ref.watch(playlistDaoProvider),
+      ref.watch(sourceDaoProvider),
+      ref.watch(linkResolverServiceProvider),
+    ));
 
 /// Overridden in main.dart with a real, already-initialized PrefsService
 /// (SharedPreferences.getInstance() is async, so it's awaited once at

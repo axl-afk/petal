@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/auth_session.dart';
 import '../data/services/auth/auth_service.dart';
 import '../data/services/prefs_service.dart';
+import 'cloud_sync_controller.dart';
 import 'library_controller.dart';
 import 'providers.dart';
 
@@ -41,11 +42,23 @@ class AuthController extends StateNotifier<AuthState> {
       await _prefs.saveSession(session);
       state = AuthState(session: session);
 
-      // "once user login and setup drive links not need to do it again and
-      // if the same id has drive it auto connect it to the player" —
-      // re-resolve any links this account saved previously so the library
-      // repopulates without the user re-pasting anything.
-      await _ref.read(libraryControllerProvider.notifier).reconnectSavedSourcesForAccount(session.email);
+      if (kind == AuthProviderKind.google) {
+        // "app gonna keep the details on their google drive what they
+        // added or not, so that i don't need a server for it" — a
+        // Google-signed-in library restores from this account's own Drive
+        // backup (see cloud_sync_controller.dart) rather than only from
+        // this device's local SavedSources table, so switching devices or
+        // reinstalling actually brings the library back.
+        await _ref.read(cloudSyncControllerProvider.notifier).syncAfterSignIn(session.email);
+      } else {
+        // "once user login and setup drive links not need to do it again and
+        // if the same id has drive it auto connect it to the player" —
+        // re-resolve any links this account saved previously so the library
+        // repopulates without the user re-pasting anything. Microsoft/
+        // OneDrive doesn't have the Drive-backup mechanism above (yet), so
+        // this stays local-device-only for now.
+        await _ref.read(libraryControllerProvider.notifier).reconnectSavedSourcesForAccount(session.email);
+      }
     } catch (e) {
       state = state.copyWith(loading: false, error: e is AuthNotConfiguredException ? e.message : e.toString());
     }

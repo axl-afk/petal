@@ -5,6 +5,8 @@ import '../../data/models/track_extensions.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
+import '../../utils/ui_scale.dart';
+import '../widgets/track_art.dart';
 
 class RightRail extends ConsumerWidget {
   const RightRail({super.key});
@@ -18,7 +20,7 @@ class RightRail extends ConsumerWidget {
         : playback.queue.sublist((playback.index + 1).clamp(0, playback.queue.length));
 
     return Container(
-      width: PetalTheme.rightRailWidth,
+      width: PetalTheme.rightRailWidth * UiScale.of(context),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: petal.colors.surface.withOpacity(0.5),
@@ -36,12 +38,7 @@ class RightRail extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(color: petal.colors.surface2, borderRadius: BorderRadius.circular(8)),
-                      child: Icon(Icons.music_note, size: 16, color: petal.colors.ink3),
-                    ),
+                    TrackArt(track: t, size: 36, iconSize: 16),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(

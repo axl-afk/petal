@@ -15,7 +15,22 @@ class GoogleAuthService implements AuthProviderService {
 
   GoogleSignIn _buildClient() {
     return GoogleSignIn(
-      scopes: const ['email', 'profile'],
+      scopes: const [
+        'email',
+        'profile',
+        // Drive's "Application Data" folder — a hidden per-app storage area
+        // inside the user's own Drive that never shows up in their normal
+        // Drive UI and that only this app can read or write. This is the
+        // whole mechanism behind the library backup in
+        // cloud_backup_service.dart: no Petal-run server, no access to any
+        // of the user's actual Drive files, just one small JSON blob this
+        // app owns inside their account. See README's "How library backup
+        // works". Note: Google's OAuth consent screen treats this as a
+        // "sensitive" scope — until you verify your app in Google Cloud
+        // Console, sign-in will show an "unverified app" warning to anyone
+        // who isn't added as a test user on your project.
+        'https://www.googleapis.com/auth/drive.appdata',
+      ],
       clientId: AuthConfig.googleConfigured ? AuthConfig.googleWebClientId : null,
     );
   }
@@ -35,6 +50,25 @@ class GoogleAuthService implements AuthProviderService {
       displayName: account.displayName,
       accessToken: auth.accessToken,
     );
+  }
+
+  /// Re-authenticates silently (no UI) to get a fresh access token. Google
+  /// access tokens expire after about an hour, so a session that's been
+  /// open longer than that (or resumed from a persisted session on a later
+  /// launch) needs this before any Drive API call rather than reusing the
+  /// token captured at sign-in time. Returns null if silent re-auth isn't
+  /// possible (e.g. offline, or the grant was revoked) — callers treat that
+  /// as "skip this sync, try again next time" rather than an error.
+  Future<String?> refreshAccessToken() async {
+    final client = _buildClient();
+    try {
+      final account = await client.signInSilently();
+      if (account == null) return null;
+      final auth = await account.authentication;
+      return auth.accessToken;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

@@ -7,6 +7,8 @@ import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
+import '../../utils/ui_scale.dart';
+import '../widgets/track_art.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
@@ -19,11 +21,12 @@ class MiniPlayer extends ConsumerWidget {
     final track = playback.current;
 
     if (track == null) return const SizedBox.shrink();
+    final scale = UiScale.of(context);
 
     return GestureDetector(
       onTap: () => ref.read(currentSectionProvider.notifier).state = AppSection.nowPlaying,
       child: Container(
-        height: 72,
+        height: 72 * scale,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: petal.colors.surface.withOpacity(0.9),
@@ -31,12 +34,7 @@ class MiniPlayer extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: petal.colors.surface2, borderRadius: BorderRadius.circular(8)),
-              child: Icon(Icons.music_note, size: 18, color: petal.colors.ink3),
-            ),
+            TrackArt(track: track, size: 44 * scale, iconSize: 18),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

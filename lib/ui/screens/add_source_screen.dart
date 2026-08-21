@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,8 +18,11 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
   final _titleController = TextEditingController();
   final _artistController = TextEditingController();
   bool _busy = false;
+  bool _busyLocal = false;
   String? _error;
   String? _success;
+  String? _localError;
+  String? _localSuccess;
 
   @override
   void dispose() {
@@ -58,12 +61,74 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
   }
 
   Future<void> _importLocal() async {
+    setState(() {
+      _busyLocal = true;
+      _localError = null;
+      _localSuccess = null;
+    });
     try {
-      await ref.read(libraryControllerProvider.notifier).importLocalFiles();
-      setState(() => _success = 'Imported local files into your library.');
+      final result = await ref.read(libraryControllerProvider.notifier).importLocalFiles();
+      setState(() => _localSuccess = _resultMessage(result));
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _localError = e.toString());
+    } finally {
+      setState(() => _busyLocal = false);
     }
+  }
+
+  Future<void> _importFolder() async {
+    setState(() {
+      _busyLocal = true;
+      _localError = null;
+      _localSuccess = null;
+    });
+    try {
+      final result = await ref.read(libraryControllerProvider.notifier).importFolder();
+      setState(() => _localSuccess = result == null ? null : _resultMessage(result));
+    } catch (e) {
+      setState(() => _localError = e.toString());
+    } finally {
+      setState(() => _busyLocal = false);
+    }
+  }
+
+  Future<void> _scanMusicFolder() async {
+    setState(() {
+      _busyLocal = true;
+      _localError = null;
+      _localSuccess = null;
+    });
+    try {
+      final result = await ref.read(libraryControllerProvider.notifier).scanPlatformMusicFolder();
+      setState(() {
+        _localSuccess = result == null
+            ? null
+            : _resultMessage(result);
+        _localError = result == null ? 'Couldn\'t find a Music folder on this machine — try "Choose a folder" instead.' : null;
+      });
+    } catch (e) {
+      setState(() => _localError = e.toString());
+    } finally {
+      setState(() => _busyLocal = false);
+    }
+  }
+
+  // defaultTargetPlatform (flutter/foundation.dart) rather than dart:io's
+  // Platform — the latter can't even be imported into a file compiled for
+  // web (see local_file_service.dart's conditional-export comment for the
+  // same constraint), while this is web-safe and reports the host OS.
+  bool get _isDesktop =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux);
+
+  String _resultMessage(ImportResult result) {
+    if (result.found == 0) return 'No audio files found there.';
+    if (result.imported == result.found) {
+      return 'Imported ${result.imported} track${result.imported == 1 ? '' : 's'} into your library.';
+    }
+    return 'Imported ${result.imported} of ${result.found} files — the rest couldn\'t be read.';
   }
 
   @override
@@ -141,11 +206,55 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                       children: [
                         Text('Import audio files already on this device.', style: petal.text.cardSubtitle),
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: _importLocal,
-                          icon: const Icon(Icons.folder_open_outlined, size: 18),
-                          label: const Text('Choose files'),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _busyLocal ? null : _importLocal,
+                              icon: const Icon(Icons.insert_drive_file_outlined, size: 18),
+                              label: const Text('Choose files'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busyLocal ? null : _importFolder,
+                              icon: const Icon(Icons.folder_open_outlined, size: 18),
+                              label: const Text('Choose a folder'),
+                            ),
+                            if (_isDesktop)
+                              OutlinedButton.icon(
+                                onPressed: _busyLocal ? null : _scanMusicFolder,
+                                icon: const Icon(Icons.travel_explore_outlined, size: 18),
+                                label: const Text('Scan Music folder'),
+                              ),
+                          ],
                         ),
+                        if (_busyLocal) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: petal.colors.ink2)),
+                              const SizedBox(width: 8),
+                              Text('Scanning and importing…', style: petal.text.meta),
+                            ],
+                          ),
+                        ],
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Text(
+                            '"Choose a folder" imports everything found in it, including subfolders. "Scan Music folder" '
+                            'does the same for this machine\'s own Music folder — a quick way to pull in your whole '
+                            'existing library without navigating to it by hand.',
+                            style: petal.text.cardSubtitle,
+                          ),
+                        ),
+                        if (_localError != null) ...[
+                          const SizedBox(height: 10),
+                          Text(_localError!, style: TextStyle(color: Colors.redAccent.shade200, fontSize: 12.5)),
+                        ],
+                        if (_localSuccess != null) ...[
+                          const SizedBox(height: 10),
+                          Text(_localSuccess!, style: TextStyle(color: petal.colors.good, fontSize: 12.5)),
+                        ],
                       ],
                     ),
             ),

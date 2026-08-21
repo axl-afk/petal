@@ -118,9 +118,40 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   Future<void> upsert(TracksCompanion track) =>
       into(tracks).insertOnConflictUpdate(track);
 
-  Future<void> upsertAll(List<TracksCompanion> items) => batch((b) {
-        b.insertAll(tracks, items, mode: InsertMode.insertOrReplace);
-      });
+  /// Inserts new tracks, or — for an id that already exists — updates only
+  /// the fields a re-scan can legitimately refresh (title/artist/album/
+  /// genre/duration/sourceUri/artworkUrl). Deliberately leaves isFavorite,
+  /// cached lyrics, and addedAt alone on an existing row: this used to run
+  /// as a raw `INSERT OR REPLACE`, which replaces the *entire* row —
+  /// harmless back when every import got a random id (so this path never
+  /// actually hit an existing row), but local-file imports now use a
+  /// deterministic id derived from the file path specifically so re-scans
+  /// update in place instead of duplicating (see utils/id_gen.dart). Once
+  /// that's true, a blind full-row replace would silently un-favorite
+  /// tracks and drop their cached lyrics every time a folder gets
+  /// re-scanned — this does a plain select-then-insert-or-update instead,
+  /// avoiding any uncertain-API batch/on-conflict helper.
+  Future<void> upsertAll(List<TracksCompanion> items) async {
+    for (final item in items) {
+      final id = item.id.value;
+      final existing = await (select(tracks)..where((t) => t.id.equals(id))).getSingleOrNull();
+      if (existing == null) {
+        await into(tracks).insert(item);
+      } else {
+        await (update(tracks)..where((t) => t.id.equals(id))).write(
+          TracksCompanion(
+            title: item.title,
+            artist: item.artist,
+            album: item.album,
+            genre: item.genre,
+            durationMs: item.durationMs,
+            sourceUri: item.sourceUri,
+            artworkUrl: item.artworkUrl,
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> deleteById(String id) =>
       (delete(tracks)..where((t) => t.id.equals(id))).go();

@@ -5,6 +5,7 @@ import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/ui_scale.dart';
 
 class TopBar extends ConsumerWidget implements PreferredSizeWidget {
   final bool isMobile;
@@ -23,7 +24,10 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     final brand = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('🪷', style: TextStyle(fontSize: 18)),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: Image.asset('assets/icon/icon_square.png', width: 24, height: 24),
+        ),
         const SizedBox(width: 8),
         Text('Petal', style: petal.text.brand),
       ],
@@ -100,7 +104,7 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     final container = Container(
       color: petal.colors.surface.withOpacity(0.72),
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 0),
-      constraints: BoxConstraints(minHeight: PetalTheme.topBarHeight),
+      constraints: BoxConstraints(minHeight: PetalTheme.topBarHeight * UiScale.of(context)),
       child: isMobile
           ? Column(
               mainAxisSize: MainAxisSize.min,

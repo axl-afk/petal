@@ -7,11 +7,22 @@ import '../data/db/daos/playlist_dao.dart';
 import '../data/db/daos/source_dao.dart';
 import '../data/db/daos/track_dao.dart';
 import '../data/db/tables.dart';
+import '../data/models/auth_session.dart' show AuthProviderKind;
 import '../data/models/resolved_source.dart';
 import '../data/services/link_resolver_service.dart';
 import '../data/services/local_file_service.dart';
 import '../utils/id_gen.dart';
+import 'auth_controller.dart';
+import 'cloud_sync_controller.dart';
 import 'providers.dart';
+
+/// Result of a local import batch — how many files were found vs. actually
+/// added, so the UI can say something more useful than a generic "done".
+class ImportResult {
+  final int found;
+  final int imported;
+  const ImportResult({required this.found, required this.imported});
+}
 
 enum LibraryTab { songs, artists, genres, playlists, favorites }
 
@@ -53,9 +64,24 @@ class LibraryController extends StateNotifier<LibraryState> {
   final SourceDao sourceDao;
   final LinkResolverService resolver;
   final LocalFileService localFiles;
+  final Ref _ref;
 
-  LibraryController(this.trackDao, this.playlistDao, this.sourceDao, this.resolver, this.localFiles)
+  LibraryController(this.trackDao, this.playlistDao, this.sourceDao, this.resolver, this.localFiles, this._ref)
       : super(const LibraryState());
+
+  /// Kicks a debounced Google Drive backup (see cloud_sync_controller.dart)
+  /// after any mutation that a signed-in Google account cares about
+  /// carrying to other devices. No-ops for a signed-out user, a
+  /// Microsoft-signed-in user (no Drive backup for OneDrive accounts yet),
+  /// or a purely local-file change (those never sync — see
+  /// library_sync_service.dart).
+  void _scheduleBackupIfGoogle() {
+    final auth = _ref.read(authControllerProvider);
+    final session = auth.session;
+    if (session != null && session.provider == AuthProviderKind.google) {
+      _ref.read(cloudSyncControllerProvider.notifier).scheduleBackup(session.email);
+    }
+  }
 
   // --- navigation / filtering -------------------------------------------
 
@@ -92,24 +118,74 @@ class LibraryController extends StateNotifier<LibraryState> {
 
   // --- mutations ----------------------------------------------------------
 
-  Future<void> toggleFavorite(Track track) => trackDao.setFavorite(track.id, !track.isFavorite);
+  Future<void> toggleFavorite(Track track) async {
+    await trackDao.setFavorite(track.id, !track.isFavorite);
+    // Only cloud-sourced tracks (ids from idForCloudSource, see
+    // connectLink) are part of what gets backed up — skip scheduling a
+    // Drive write for a purely local-file favorite, which buildSnapshot()
+    // would just filter out anyway.
+    if (track.id.startsWith('cloud_')) _scheduleBackupIfGoogle();
+  }
 
-  Future<void> importLocalFiles() async {
+  Future<ImportResult> importLocalFiles() async {
     if (kIsWeb) {
       throw StateError('The web version of Petal doesn\'t have access to local files — use the installed app.');
     }
     final picked = await localFiles.pickAudioFiles();
-    if (picked.isEmpty) return;
-    final companions = picked
-        .map((f) => TracksCompanion.insert(
-              id: newId(),
-              title: localFiles.titleFromFileName(f.fileName),
-              sourceType: TrackSourceType.local,
-              sourceUri: f.path,
-              originUri: f.path,
-            ))
-        .toList();
-    await trackDao.upsertAll(companions);
+    return _importPaths(picked);
+  }
+
+  /// Pick a folder and recursively import every audio file found under it
+  /// (including subfolders) — the "point at a folder, not one file at a
+  /// time" import most desktop music players offer.
+  Future<ImportResult?> importFolder() async {
+    if (kIsWeb) {
+      throw StateError('The web version of Petal doesn\'t have access to local files — use the installed app.');
+    }
+    final folder = await localFiles.pickAudioFolder();
+    if (folder == null) return null; // user cancelled the folder picker
+    final paths = await localFiles.scanFolderForAudio(folder);
+    return _importPaths(paths);
+  }
+
+  /// Quick-scan the OS's known Music folder (desktop only — see
+  /// LocalFileService.platformMusicFolder for why this, not a literal
+  /// whole-disk crawl, is what "auto scan for music" means here). Returns
+  /// null if there's no such folder on this platform/machine.
+  Future<ImportResult?> scanPlatformMusicFolder() async {
+    if (kIsWeb) return null;
+    final folder = await localFiles.platformMusicFolder();
+    if (folder == null) return null;
+    final paths = await localFiles.scanFolderForAudio(folder);
+    return _importPaths(paths);
+  }
+
+  Future<ImportResult> _importPaths(List<String> paths) async {
+    if (paths.isEmpty) return const ImportResult(found: 0, imported: 0);
+
+    final companions = <TracksCompanion>[];
+    for (final path in paths) {
+      try {
+        final imported = await localFiles.importFile(path);
+        companions.add(TracksCompanion.insert(
+          id: imported.id,
+          title: imported.title,
+          artist: Value(imported.artist),
+          album: Value(imported.album),
+          genre: Value(imported.genre),
+          durationMs: Value(imported.durationMs),
+          sourceType: TrackSourceType.local,
+          sourceUri: imported.storedPath,
+          originUri: path,
+          artworkUrl: Value(imported.artworkPath),
+        ));
+      } catch (_) {
+        // One bad file (unreadable, disappeared mid-scan, disk full on the
+        // copy step) shouldn't abort the rest of the batch.
+      }
+    }
+    if (companions.isNotEmpty) await trackDao.upsertAll(companions);
+    return ImportResult(found: paths.length, imported: companions.length);
   }
 
   /// Resolves a pasted Drive/OneDrive/direct link and, on success, adds it
@@ -130,8 +206,13 @@ class LibraryController extends StateNotifier<LibraryState> {
       _ => TrackSourceType.direct,
     };
 
+    // A deterministic id derived from the link itself (see idForCloudSource)
+    // rather than a random one — otherwise pasting the same link twice, or
+    // reconnecting it after sign-in, silently duplicated the track. It also
+    // gives Google Drive backup a stable id to reference this track by from
+    // another device (see library_sync_service.dart).
     await trackDao.upsert(TracksCompanion.insert(
-      id: newId(),
+      id: idForCloudSource(rawLink),
       title: title.trim().isEmpty ? 'Untitled Track' : title.trim(),
       artist: Value(artist),
       sourceType: sourceType,
@@ -141,27 +222,31 @@ class LibraryController extends StateNotifier<LibraryState> {
     ));
 
     if (accountEmail != null && sourceType != TrackSourceType.direct) {
-      await sourceDao.add(
+      await sourceDao.upsertForAccount(
+        accountEmail: accountEmail,
         provider: sourceType,
         rawLink: rawLink,
-        accountEmail: accountEmail,
         label: title,
       );
+      _scheduleBackupIfGoogle();
     }
 
     return resolved;
   }
 
-  /// Runs right after sign-in: re-resolves every link this account has
-  /// saved before, so switching devices (or reinstalling) brings the cloud
-  /// library back without the user re-pasting anything.
+  /// Runs right after Microsoft sign-in (Google uses the Drive-backup path
+  /// in cloud_sync_controller.dart instead — see AuthController.signIn):
+  /// re-resolves every link this account has saved on this device before,
+  /// so switching devices (or reinstalling) brings the cloud library back
+  /// without the user re-pasting anything, as long as this exact device
+  /// has seen those links before.
   Future<void> reconnectSavedSourcesForAccount(String accountEmail) async {
     final saved = await sourceDao.getForAccount(accountEmail);
     for (final source in saved) {
       final resolved = resolver.resolve(source.rawLink);
       if (!resolved.ok || resolved.playableUri == null) continue;
       await trackDao.upsert(TracksCompanion.insert(
-        id: newId(),
+        id: idForCloudSource(source.rawLink),
         title: source.label ?? 'Untitled Track',
         sourceType: source.provider,
         sourceUri: resolved.playableUri!,
@@ -171,10 +256,20 @@ class LibraryController extends StateNotifier<LibraryState> {
     }
   }
 
+  // Not itself hooked to _scheduleBackupIfGoogle — a brand-new playlist has
+  // no tracks yet, and buildSnapshot() skips any playlist with no
+  // cloud-portable tracks in it, so there'd be nothing new to back up until
+  // addTrackToPlaylist (below) actually adds one.
   Future<Playlist> createPlaylist(String name) => playlistDao.create(name);
 
-  Future<void> addTrackToPlaylist(String playlistId, String trackId) =>
-      playlistDao.addTrack(playlistId, trackId);
+  Future<void> addTrackToPlaylist(String playlistId, String trackId) async {
+    await playlistDao.addTrack(playlistId, trackId);
+    // Same reasoning as toggleFavorite above — a playlist full of purely
+    // local tracks has nothing cloud-portable in it (buildSnapshot() skips
+    // playlists with no cloud track ids), so only bother syncing when this
+    // addition could actually change what gets backed up.
+    if (trackId.startsWith('cloud_')) _scheduleBackupIfGoogle();
+  }
 }
 
 final libraryControllerProvider = StateNotifierProvider<LibraryController, LibraryState>((ref) {
@@ -184,6 +279,7 @@ final libraryControllerProvider = StateNotifierProvider<LibraryController, Libra
     ref.watch(sourceDaoProvider),
     ref.watch(linkResolverServiceProvider),
     ref.watch(localFileServiceProvider),
+    ref,
   );
 });
 

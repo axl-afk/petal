@@ -7,6 +7,7 @@ import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/ui_scale.dart';
 
 class SideRail extends ConsumerWidget {
   const SideRail({super.key});
@@ -22,7 +23,7 @@ class SideRail extends ConsumerWidget {
     final oneDriveConnected = session?.provider == AuthProviderKind.microsoft;
 
     return Container(
-      width: PetalTheme.railWidth,
+      width: PetalTheme.railWidth * UiScale.of(context),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
       decoration: BoxDecoration(
         color: petal.colors.surface.withOpacity(0.5),
