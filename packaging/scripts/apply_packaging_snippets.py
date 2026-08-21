@@ -3,10 +3,8 @@
 apply_packaging_snippets.py
 
 Merges Petal's packaging/ snippets — the petalauth:// OAuth redirect scheme,
-Android permissions, macOS sandbox entitlements, an Android compileSdk/
-targetSdk bump (app module AND every plugin subproject — see
-add_subprojects_compilesdk_override()), and iOS App-Store-review usage-
-description strings — into the platform folders that `flutter create .`
+Android permissions, macOS sandbox entitlements, an Android compileSdk/targetSdk bump (app module), and iOS App-Store-review
+usage-description strings — into the platform folders that `flutter create .`
 generates. The content mirrors:
 
     packaging/android/AndroidManifest-snippet.xml
@@ -57,7 +55,7 @@ ROOT = Path.cwd()
 # enough for today's plugins," it's the number you'd need for a Play Store
 # submission anyway. minSdk is left untouched (set separately, unrelated
 # to this failure).
-ANDROID_SDK_VERSION = 36
+ANDROID_SDK_VERSION = 37
 
 URL_SCHEME = "petalauth"
 URL_SCHEME_ENTRY = {
@@ -294,96 +292,8 @@ def bump_android_sdk():
           f"{ANDROID_SDK_VERSION}")
 
 
-SUBPROJECTS_COMPILESDK_MARKER = "// --- Petal: force compileSdk on all subprojects ---"
 
-
-def add_subprojects_compilesdk_override():
-    """Forces EVERY Android subproject — the app module AND every Flutter
-    plugin module (file_picker, flutter_plugin_android_lifecycle, etc.) —
-    to compile against ANDROID_SDK_VERSION, by patching the ROOT-level
-    android/build.gradle(.kts) (NOT android/app/build.gradle(.kts), which
-    bump_android_sdk() above already handles).
-
-    WHY THIS SEPARATE FIX IS NEEDED: a real CI failure showed
-    ":file_picker:checkReleaseAarMetadata" failing because
-    "flutter_plugin_android_lifecycle requires compileSdk 36+" while
-    ":file_picker is currently compiled against android-34" — even after
-    bump_android_sdk() had already patched the app module's build.gradle.kts
-    to compileSdk/targetSdk 36. That's because every Flutter plugin
-    subproject gets its OWN separate `flutter` Gradle extension instance
-    (Flutter's own gradle plugin tooling — PluginHandler.kt — calls
-    `pluginProject.extensions.create("flutter", FlutterExtension::class.java)`
-    once per plugin), and `flutter.compileSdkVersion` on that extension is a
-    hardcoded constant baked into whichever Flutter SDK is installed
-    (FlutterExtension.kt) — nothing in the app module's own build file
-    reaches into a plugin module's copy of that extension. Patching only
-    android/app/build.gradle.kts therefore never touched what compileSdk
-    file_picker (or any other plugin) actually built against.
-
-    The only lever that reaches every subproject uniformly is a ROOT-level
-    `subprojects {}` block that runs after each subproject has been
-    evaluated and force-sets compileSdkVersion directly through the Android
-    Gradle Plugin's own extension API, overriding whatever
-    `flutter.compileSdkVersion` value that module happened to declare. This
-    is the fix that actually makes the build pass; bump_android_sdk() is
-    kept too since it's harmless and keeps the app module's own numbers
-    correct for anyone reading that file by eye.
-    """
-    kts = ROOT / "android/build.gradle.kts"
-    groovy = ROOT / "android/build.gradle"
-    path = kts if kts.exists() else groovy if groovy.exists() else None
-
-    if path is None:
-        print(f"SKIP  android/build.gradle(.kts) — not found. Did you run "
-              f"`flutter create .` first?")
-        return
-
-    text = path.read_text()
-
-    if SUBPROJECTS_COMPILESDK_MARKER in text:
-        print(f"SKIP  {path.relative_to(ROOT)} — subprojects compileSdk override already present")
-        return
-
-    is_kotlin_dsl = path.suffix == ".kts"
-
-    comment = (
-        "// A real CI failure proved every Flutter plugin subproject (file_picker,\n"
-        "// flutter_plugin_android_lifecycle, etc.) resolves its OWN compileSdk\n"
-        "// independently of the app module's build.gradle(.kts) — patching only the\n"
-        "// app module left plugins on Flutter's old default (android-34) while a\n"
-        "// plugin dependency required 36+. This reaches into every subproject after\n"
-        "// it evaluates and force-sets compileSdk uniformly, app + plugins alike.\n"
-    )
-
-    if is_kotlin_dsl:
-        block = (
-            f"\n{SUBPROJECTS_COMPILESDK_MARKER}\n" + comment +
-            "subprojects {\n"
-            "    afterEvaluate {\n"
-            "        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)\n"
-            f"            ?.compileSdkVersion({ANDROID_SDK_VERSION})\n"
-            "    }\n"
-            "}\n"
-        )
-    else:
-        block = (
-            f"\n{SUBPROJECTS_COMPILESDK_MARKER}\n" + comment +
-            "subprojects {\n"
-            "    afterEvaluate { proj ->\n"
-            "        def androidExt = proj.extensions.findByType(com.android.build.gradle.BaseExtension)\n"
-            "        if (androidExt != null) {\n"
-            f"            androidExt.compileSdkVersion({ANDROID_SDK_VERSION})\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
-        )
-
-    backup(path)
-    path.write_text(text.rstrip("\n") + "\n" + block)
-    print(f"OK    {path.relative_to(ROOT)} — added subprojects{{}} override forcing "
-          f"compileSdk {ANDROID_SDK_VERSION} on every module (app + all plugins)")
-
-
+  
 def main():
     print("Applying Petal packaging snippets into platform folders...\n")
 
@@ -413,15 +323,7 @@ def main():
               f"error ({e}); set compileSdk and targetSdk to {ANDROID_SDK_VERSION} by hand")
     print()
 
-    print("Android compileSdk (root — forces every plugin subproject too)")
-    try:
-        add_subprojects_compilesdk_override()
-    except Exception as e:
-        print(f"MANUAL android/build.gradle(.kts) — script hit an unexpected "
-              f"error ({e}); add a root-level `subprojects {{ afterEvaluate {{ "
-              f"extensions.findByType(com.android.build.gradle.BaseExtension::class.java)"
-              f"?.compileSdkVersion({ANDROID_SDK_VERSION}) }} }}` block by hand")
-    print()
+
 
     print("Done. Diff against the *.orig backups to review exactly what changed, e.g.:")
     print("  diff ios/Runner/Info.plist.orig ios/Runner/Info.plist")
