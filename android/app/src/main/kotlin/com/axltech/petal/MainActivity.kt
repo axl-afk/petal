@@ -1,4 +1,4 @@
-package com.axl.petal
+package com.axltech.petal
 
 import io.flutter.embedding.android.FlutterActivity
 

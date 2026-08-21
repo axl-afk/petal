@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audiotags
   desktop_webview_window
   sqlite3_flutter_libs
   url_launcher_windows
