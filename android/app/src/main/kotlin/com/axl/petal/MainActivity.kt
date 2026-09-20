@@ -2,6 +2,7 @@ package com.axl.petal
 
 import android.content.ContentUris
 import android.provider.MediaStore
+import android.net.Uri
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,12 +12,16 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.petal/device_media")
             .setMethodCallHandler { call, result ->
-                if (call.method != "scanAudio") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
-                }
                 try {
-                    result.success(scanAudio())
+                    when (call.method) {
+                        "scanAudio" -> result.success(scanAudio())
+                        "loadArtwork" -> {
+                            val uri = call.argument<String>("uri")
+                            if (uri == null) result.success(null)
+                            else result.success(loadArtwork(uri))
+                        }
+                        else -> result.notImplemented()
+                    }
                 } catch (error: SecurityException) {
                     result.error("permission_denied", "Audio permission is required to scan this device.", null)
                 } catch (error: Exception) {
@@ -32,6 +37,7 @@ class MainActivity : FlutterActivity() {
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -47,9 +53,11 @@ class MainActivity : FlutterActivity() {
             val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
+                val albumId = cursor.getLong(albumIdColumn)
                 output.add(
                     mapOf(
                         "id" to id.toString(),
@@ -58,10 +66,22 @@ class MainActivity : FlutterActivity() {
                         "album" to (cursor.getString(albumColumn) ?: ""),
                         "durationMs" to cursor.getLong(durationColumn),
                         "contentUri" to ContentUris.withAppendedId(collection, id).toString(),
+                        "artworkUri" to "content://media/external/audio/albumart/$albumId",
                     ),
                 )
             }
         }
         return output
+    }
+
+    private fun loadArtwork(uri: String): ByteArray? {
+        return try {
+            contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                val bytes = input.readBytes()
+                if (bytes.size <= 8 * 1024 * 1024) bytes else null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 }
