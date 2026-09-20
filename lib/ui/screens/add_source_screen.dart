@@ -213,6 +213,11 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  bool get _isApple =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+
   String _resultMessage(ImportResult result) {
     if (result.found == 0) return 'No audio files found there.';
     if (result.imported == result.found) {
@@ -351,6 +356,12 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                           spacing: 10,
                           runSpacing: 10,
                           children: [
+                            if (_isApple)
+                              FilledButton.icon(
+                                onPressed: _busyLocal ? null : _importLocal,
+                                icon: const Icon(Icons.cloud_outlined, size: 18),
+                                label: const Text('Choose from iCloud Drive'),
+                              ),
                             if (_isAndroid)
                               FilledButton.icon(
                                 onPressed: _busyLocal ? null : _scanDeviceMusic,
@@ -426,7 +437,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                             'drive this machine can see, not just the Music folder — slower, but thorough if your '
                             'music lives somewhere else. On Android, “Find device music” reads the system MediaStore. '
                             'On iPhone and iPad, Apple does not expose a whole-device file scan, so use “Choose files” '
-                            'and the native document picker.',
+                            'and the native document picker. On Apple devices, “Choose from iCloud Drive” uses the '
+                            'Apple ID already signed into the device; Apple does not expose a separate third-party '
+                            'iCloud password login or whole-drive scanning API.',
                             style: petal.text.cardSubtitle,
                           ),
                         ),

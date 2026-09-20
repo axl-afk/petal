@@ -20,6 +20,8 @@ class PlaybackState {
   final bool isBuffering;
   final LyricsResult? lyrics;
   final String? error;
+  final bool shuffleEnabled;
+  final LoopMode loopMode;
 
   const PlaybackState({
     this.current,
@@ -29,6 +31,8 @@ class PlaybackState {
     this.isBuffering = false,
     this.lyrics,
     this.error,
+    this.shuffleEnabled = false,
+    this.loopMode = LoopMode.off,
   });
 
   bool get hasNext => index >= 0 && index < queue.length - 1;
@@ -45,6 +49,8 @@ class PlaybackState {
     bool clearLyrics = false,
     String? error,
     bool clearError = false,
+    bool? shuffleEnabled,
+    LoopMode? loopMode,
   }) {
     return PlaybackState(
       current: clearCurrent ? null : (current ?? this.current),
@@ -54,6 +60,8 @@ class PlaybackState {
       isBuffering: isBuffering ?? this.isBuffering,
       lyrics: clearLyrics ? null : (lyrics ?? this.lyrics),
       error: clearError ? null : (error ?? this.error),
+      shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
+      loopMode: loopMode ?? this.loopMode,
     );
   }
 }
@@ -121,19 +129,55 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   Future<void> seek(Duration position) => player.seek(position);
 
+  Future<void> playAt(int index) async {
+    if (index < 0 || index >= state.queue.length) return;
+    state = state.copyWith(
+      index: index,
+      current: state.queue[index],
+      clearLyrics: true,
+      clearError: true,
+    );
+    await _loadCurrentAndPlay();
+  }
+
+  void toggleShuffle() {
+    state = state.copyWith(shuffleEnabled: !state.shuffleEnabled);
+  }
+
+  Future<void> cycleLoopMode() async {
+    final next = switch (state.loopMode) {
+      LoopMode.off => LoopMode.all,
+      LoopMode.all => LoopMode.one,
+      LoopMode.one => LoopMode.off,
+    };
+    await player.setLoopMode(next == LoopMode.one ? LoopMode.one : LoopMode.off);
+    state = state.copyWith(loopMode: next);
+  }
+
+  Future<void> setVolume(double volume) => player.setVolume(volume.clamp(0, 1));
+
   Future<void> next() async {
+    if (state.loopMode == LoopMode.one && state.current != null) {
+      await seek(Duration.zero);
+      await player.play();
+      return;
+    }
+    if (state.shuffleEnabled && state.queue.length > 1) {
+      var nextIndex = (DateTime.now().microsecondsSinceEpoch % state.queue.length).toInt();
+      if (nextIndex == state.index) nextIndex = (nextIndex + 1) % state.queue.length;
+      await playAt(nextIndex);
+      return;
+    }
     if (!state.hasNext) {
+      if (state.loopMode == LoopMode.all && state.queue.isNotEmpty) {
+        await playAt(0);
+        return;
+      }
       await player.pause();
       await player.seek(Duration.zero);
       return;
     }
-    final nextIndex = state.index + 1;
-    state = state.copyWith(
-      index: nextIndex,
-      current: state.queue[nextIndex],
-      clearLyrics: true,
-    );
-    await _loadCurrentAndPlay();
+    await playAt(state.index + 1);
   }
 
   Future<void> previous() async {
@@ -141,13 +185,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       await seek(Duration.zero);
       return;
     }
-    final prevIndex = state.index - 1;
-    state = state.copyWith(
-      index: prevIndex,
-      current: state.queue[prevIndex],
-      clearLyrics: true,
-    );
-    await _loadCurrentAndPlay();
+    await playAt(state.index - 1);
   }
 
   /// Lyrics-screen click-to-seek: jump to that line's timestamp and resume

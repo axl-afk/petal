@@ -290,6 +290,7 @@ class LibraryController extends StateNotifier<LibraryState> {
             sourceType: TrackSourceType.local,
             sourceUri: item.contentUri,
             originUri: item.contentUri,
+            artworkUrl: Value(item.artworkUri),
           ),
         )
         .toList();
@@ -375,6 +376,10 @@ class LibraryController extends StateNotifier<LibraryState> {
             (item) => TracksCompanion.insert(
               id: idForCloudSource(item.stableOrigin),
               title: item.title.isEmpty ? 'Untitled Track' : item.title,
+              artist: Value(item.resolvedArtist),
+              album: Value(item.album ?? ''),
+              genre: Value(item.genre ?? ''),
+              durationMs: Value(item.durationMs ?? 0),
               sourceType: item.provider,
               sourceUri: item.streamUri,
               originUri: item.stableOrigin,

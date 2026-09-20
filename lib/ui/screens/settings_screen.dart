@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,7 @@ import '../../data/services/prefs_service.dart';
 import '../../state/auth_controller.dart';
 import '../../state/cloud_sync_controller.dart';
 import '../../state/library_controller.dart';
+import '../../state/nav_controller.dart';
 import '../../state/theme_controller.dart';
 import '../../theme/app_theme.dart';
 
@@ -53,6 +55,44 @@ class SettingsScreen extends ConsumerWidget {
             ),
 
             const SizedBox(height: 16),
+
+            if (!kIsWeb &&
+                (defaultTargetPlatform == TargetPlatform.iOS ||
+                    defaultTargetPlatform == TargetPlatform.macOS)) ...[
+              _Group(
+                title: 'ICLOUD DRIVE',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.cloud_done_outlined, color: petal.colors.ink2),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Petal uses the Apple ID already connected to this device.',
+                            style: petal.text.cardTitle,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Apple does not allow third-party apps to request an iCloud password or scan an entire iCloud Drive. '
+                      'Use Apple\'s secure document picker to choose music; Petal copies it locally, reads its metadata, and keeps it available offline.',
+                      style: petal.text.cardSubtitle,
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => ref.read(currentSectionProvider.notifier).state = AppSection.addSource,
+                      icon: const Icon(Icons.cloud_download_outlined),
+                      label: const Text('Open iCloud Drive'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             _Group(
               title: 'ACCOUNT',

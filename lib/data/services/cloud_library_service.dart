@@ -78,7 +78,7 @@ class CloudLibraryService {
     final items = <CloudAudioItem>[];
     Uri? next = Uri.parse(
       'https://graph.microsoft.com/v1.0/me/drive/root/delta?'
-      r'$select=id,name,size,file,audio,lastModifiedDateTime,thumbnails',
+      r'$select=id,name,size,file,audio,lastModifiedDateTime&$expand=thumbnails',
     );
     while (next != null) {
       final response = await _client
@@ -92,6 +92,7 @@ class CloudLibraryService {
         final id = file['id'] as String?;
         final name = file['name'] as String?;
         final fileFacet = file['file'] as Map<String, dynamic>?;
+        final audio = file['audio'] as Map<String, dynamic>?;
         final mime = fileFacet?['mimeType'] as String?;
         if (id == null || name == null || !_looksLikeAudio(name, mime))
           continue;
@@ -107,6 +108,12 @@ class CloudLibraryService {
             modifiedAt: DateTime.tryParse(
               file['lastModifiedDateTime']?.toString() ?? '',
             ),
+            metadataTitle: audio?['title'] as String?,
+            artist: (audio?['artist'] ?? audio?['albumArtist']) as String?,
+            album: audio?['album'] as String?,
+            genre: audio?['genre'] as String?,
+            durationMs: (audio?['duration'] as num?)?.toInt(),
+            artworkUrl: _oneDriveThumbnail(file),
           ),
         );
         onProgress?.call(items.length);
@@ -115,6 +122,18 @@ class CloudLibraryService {
       next = nextLink == null ? null : Uri.tryParse(nextLink);
     }
     return items;
+  }
+
+  String? _oneDriveThumbnail(Map<String, dynamic> file) {
+    final sets = file['thumbnails'] as List<dynamic>?;
+    if (sets == null || sets.isEmpty) return null;
+    final first = sets.first as Map<String, dynamic>?;
+    for (final size in const ['large', 'medium', 'small']) {
+      final item = first?[size] as Map<String, dynamic>?;
+      final url = item?['url'] as String?;
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
   }
 
   bool _looksLikeAudio(String name, String? mimeType) {

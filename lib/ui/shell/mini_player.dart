@@ -22,9 +22,17 @@ class MiniPlayer extends ConsumerWidget {
 
     if (track == null) return const SizedBox.shrink();
     final scale = UiScale.of(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 720;
+    final narrow = width < 430;
 
     return GestureDetector(
       onTap: () => ref.read(currentSectionProvider.notifier).state = AppSection.nowPlaying,
+      onVerticalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -250) {
+          ref.read(currentSectionProvider.notifier).state = AppSection.nowPlaying;
+        }
+      },
       child: Container(
         height: 72 * scale,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -46,23 +54,26 @@ class MiniPlayer extends ConsumerWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: Icon(track.isFavorite ? Icons.favorite : Icons.favorite_border, size: 18),
-              color: track.isFavorite ? petal.colors.ink : petal.colors.ink2,
-              onPressed: () => ref.read(libraryControllerProvider.notifier).toggleFavorite(track),
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_previous, size: 22),
-              color: petal.colors.ink,
-              onPressed: controller.previous,
-            ),
+            if (!narrow)
+              IconButton(
+                icon: Icon(track.isFavorite ? Icons.favorite : Icons.favorite_border, size: 18),
+                color: track.isFavorite ? petal.colors.ink : petal.colors.ink2,
+                onPressed: () => ref.read(libraryControllerProvider.notifier).toggleFavorite(track),
+              ),
+            if (!compact)
+              IconButton(
+                icon: const Icon(Icons.skip_previous, size: 22),
+                color: petal.colors.ink,
+                onPressed: controller.previous,
+              ),
             _MiniPlayPause(playing: playback.isPlaying, buffering: playback.isBuffering, onTap: controller.togglePlayPause),
             IconButton(
               icon: const Icon(Icons.skip_next, size: 22),
               color: petal.colors.ink,
               onPressed: controller.next,
             ),
-            SizedBox(
+            if (!compact)
+              SizedBox(
               width: 120,
               child: StreamBuilder<Duration>(
                 stream: controller.player.positionStream,

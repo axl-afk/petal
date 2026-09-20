@@ -8,6 +8,7 @@ class DeviceAudioItem {
   final String album;
   final int durationMs;
   final String contentUri;
+  final String? artworkUri;
 
   const DeviceAudioItem({
     required this.id,
@@ -16,6 +17,7 @@ class DeviceAudioItem {
     required this.album,
     required this.durationMs,
     required this.contentUri,
+    this.artworkUri,
   });
 }
 
@@ -43,7 +45,16 @@ class DeviceMediaService {
         album: row['album'] as String? ?? '',
         durationMs: (row['durationMs'] as num?)?.toInt() ?? 0,
         contentUri: row['contentUri'] as String,
+        artworkUri: row['artworkUri'] as String?,
       );
     }).toList();
+  }
+
+  Future<Uint8List?> loadArtwork(String contentUri) async {
+    if (!supported || !contentUri.startsWith('content://')) return null;
+    return _channel.invokeMethod<Uint8List>(
+      'loadArtwork',
+      {'uri': contentUri},
+    );
   }
 }
