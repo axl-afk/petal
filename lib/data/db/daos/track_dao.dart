@@ -17,12 +17,38 @@ class GenreSummary {
   const GenreSummary(this.genre, this.trackCount);
 }
 
+class AlbumSummary {
+  final String album;
+  final String artist;
+  final String? artworkUrl;
+  final int trackCount;
+  const AlbumSummary(this.album, this.artist, this.artworkUrl, this.trackCount);
+}
+
+enum TrackOrder { title, artist, album, recentlyAdded }
+
 @DriftAccessor(tables: [Tracks])
 class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   TrackDao(super.db);
 
-  Stream<List<Track>> watchAll() =>
-      (select(tracks)..orderBy([(t) => OrderingTerm.asc(t.title)])).watch();
+  Stream<List<Track>> watchAll({TrackOrder order = TrackOrder.title}) {
+    final query = select(tracks);
+    switch (order) {
+      case TrackOrder.title:
+        query.orderBy([(t) => OrderingTerm.asc(t.title)]);
+        break;
+      case TrackOrder.artist:
+        query.orderBy([(t) => OrderingTerm.asc(t.artist)]);
+        break;
+      case TrackOrder.album:
+        query.orderBy([(t) => OrderingTerm.asc(t.album)]);
+        break;
+      case TrackOrder.recentlyAdded:
+        query.orderBy([(t) => OrderingTerm.desc(t.addedAt)]);
+        break;
+    }
+    return query.watch();
+  }
 
   Stream<List<Track>> watchByArtist(String artist) =>
       (select(tracks)
@@ -33,6 +59,12 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   Stream<List<Track>> watchByGenre(String genre) =>
       (select(tracks)
             ..where((t) => t.genre.equals(genre))
+            ..orderBy([(t) => OrderingTerm.asc(t.title)]))
+          .watch();
+
+  Stream<List<Track>> watchByAlbum(String album) =>
+      (select(tracks)
+            ..where((t) => t.album.equals(album))
             ..orderBy([(t) => OrderingTerm.asc(t.title)]))
           .watch();
 
@@ -71,6 +103,29 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
     return query.watch().map(
       (rows) => rows
           .map((r) => GenreSummary(r.read(tracks.genre)!, r.read(count)!))
+          .toList(),
+    );
+  }
+
+  Stream<List<AlbumSummary>> watchAlbums() {
+    final count = tracks.id.count();
+    final artist = tracks.artist.min();
+    final artwork = tracks.artworkUrl.min();
+    final query = selectOnly(tracks)
+      ..addColumns([tracks.album, artist, artwork, count])
+      ..where(tracks.album.equals('').not())
+      ..groupBy([tracks.album])
+      ..orderBy([OrderingTerm.asc(tracks.album)]);
+    return query.watch().map(
+      (rows) => rows
+          .map(
+            (r) => AlbumSummary(
+              r.read(tracks.album)!,
+              r.read(artist) ?? 'Unknown Artist',
+              r.read(artwork),
+              r.read(count)!,
+            ),
+          )
           .toList(),
     );
   }
@@ -232,6 +287,11 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   Future<void> cacheLyrics(String id, {String? lrc, String? plain}) =>
       (update(tracks)..where((t) => t.id.equals(id))).write(
         TracksCompanion(lyricsLrc: Value(lrc), lyricsPlain: Value(plain)),
+      );
+
+  Future<void> setLyricsOffset(String id, int milliseconds) =>
+      (update(tracks)..where((t) => t.id.equals(id))).write(
+        TracksCompanion(lyricsOffsetMs: Value(milliseconds)),
       );
 
   Future<void> setDownloadedPath(String id, String? path) =>

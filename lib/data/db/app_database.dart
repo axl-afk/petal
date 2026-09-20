@@ -29,7 +29,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.withExecutor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -57,6 +57,10 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(tracks, tracks.remoteModifiedAt);
         await m.addColumn(tracks, tracks.downloadedPath);
         await _createIndices();
+      }
+      if (from < 4) {
+        await m.addColumn(tracks, tracks.lyricsOffsetMs);
+        await m.addColumn(playlists, playlists.artworkData);
       }
     },
     beforeOpen: (details) async {

@@ -1,0 +1,14 @@
+{
+  "@@locale": "es",
+  "library": "Biblioteca", "playing": "Reproduciendo", "add": "Añadir",
+  "settings": "Ajustes", "search": "Buscar", "home": "Inicio",
+  "favoriteSongs": "Canciones favoritas", "songs": "Canciones", "artists": "Artistas",
+  "albums": "Álbumes", "genres": "Géneros", "allPlaylists": "Todas las listas",
+  "sources": "Fuentes", "thisDevice": "Este dispositivo", "addSource": "Añadir una fuente",
+  "playlists": "Listas", "newPlaylist": "Nueva lista", "searchLibrary": "Buscar en tu biblioteca",
+  "playAll": "Reproducir todo", "title": "Título", "album": "Álbum",
+  "nothingHere": "Todavía no hay nada.", "addOrScan": "Añade una fuente o busca música en este dispositivo.",
+  "previous": "Anterior", "next": "Siguiente", "play": "Reproducir", "pause": "Pausar",
+  "fullScreen": "Pantalla completa", "language": "Idioma", "systemLanguage": "Idioma del sistema",
+  "appearance": "Apariencia", "account": "Cuenta", "about": "Acerca de"
+}

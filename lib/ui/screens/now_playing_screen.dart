@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../data/db/app_database.dart';
 import '../../data/models/track_extensions.dart';
+import '../../data/services/window/window_service.dart';
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
@@ -13,6 +15,8 @@ import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import '../../utils/lyric_sync.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/equalizer_sheet.dart';
+import '../widgets/group_playback_sheet.dart';
 import '../widgets/swipe_down_to_dismiss.dart';
 import '../widgets/track_art.dart';
 
@@ -121,6 +125,21 @@ class _PlayerHeader extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          IconButton(
+            tooltip: 'Listen Together',
+            onPressed: () => GroupPlaybackSheet.show(context),
+            icon: const Icon(Icons.speaker_group_outlined),
+          ),
+          IconButton(
+            tooltip: 'Equalizer',
+            onPressed: () => EqualizerSheet.show(context),
+            icon: const Icon(Icons.tune_rounded),
+          ),
+          IconButton(
+            tooltip: 'Full screen',
+            onPressed: WindowService.toggleFullscreen,
+            icon: const Icon(Icons.fullscreen_rounded),
+          ),
           IconButton(
             tooltip: 'More options',
             onPressed: () {},
@@ -511,16 +530,37 @@ class _PlayerPanelBody extends StatelessWidget {
   }
 }
 
-class _InlineLyrics extends StatelessWidget {
+class _InlineLyrics extends StatefulWidget {
   final Track track;
   final PlaybackState playback;
   final PlaybackController controller;
   const _InlineLyrics({super.key, required this.track, required this.playback, required this.controller});
 
   @override
+  State<_InlineLyrics> createState() => _InlineLyricsState();
+}
+
+class _InlineLyricsState extends State<_InlineLyrics> {
+  final _scrollController = ItemScrollController();
+  int _lastActive = -1;
+
+  void _keepActiveVisible(int active) {
+    if (active < 0 || active == _lastActive || !_scrollController.isAttached) {
+      return;
+    }
+    _lastActive = active;
+    _scrollController.scrollTo(
+      index: active,
+      alignment: .32,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final petal = context.petal;
-    final lyrics = playback.lyrics;
+    final lyrics = widget.playback.lyrics;
     if (lyrics == null) return const Center(child: CircularProgressIndicator());
     if (!lyrics.found) {
       return Center(child: Text('Lyrics are not available for this track.', style: petal.text.meta));
@@ -532,10 +572,14 @@ class _InlineLyrics extends StatelessWidget {
       );
     }
     return StreamBuilder<Duration>(
-      stream: controller.player.positionStream,
+      stream: widget.controller.player.positionStream,
       builder: (context, snapshot) {
-        final active = currentLyricIndex(lyrics.synced, snapshot.data ?? Duration.zero);
-        return ListView.builder(
+        final position = (snapshot.data ?? Duration.zero) +
+            Duration(milliseconds: widget.playback.lyricsOffsetMs);
+        final active = currentLyricIndex(lyrics.synced, position);
+        WidgetsBinding.instance.addPostFrameCallback((_) => _keepActiveVisible(active));
+        return ScrollablePositionedList.builder(
+          itemScrollController: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           itemCount: lyrics.synced.length,
           itemBuilder: (context, index) {
@@ -543,7 +587,7 @@ class _InlineLyrics extends StatelessWidget {
             final selected = index == active;
             return InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: () => controller.seekToLyricLine(line),
+              onTap: () => widget.controller.seekToLyricLine(line),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: AnimatedDefaultTextStyle(

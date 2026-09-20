@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/auth_controller.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/ui_scale.dart';
+import '../widgets/profile_avatar.dart';
 
 class TopBar extends ConsumerWidget implements PreferredSizeWidget {
   final bool isMobile;
@@ -17,6 +19,7 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final petal = context.petal;
+    final l10n = AppLocalizations.of(context)!;
     final section = ref.watch(currentSectionProvider);
     final libraryState = ref.watch(libraryControllerProvider);
     final session = ref.watch(authControllerProvider).session;
@@ -37,25 +40,6 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
       ],
     );
 
-    final tabs = Wrap(
-      spacing: 2,
-      children: LibraryTab.values.map((tab) {
-        final isActiveTab =
-            section == AppSection.library &&
-            libraryState.tab == tab &&
-            !libraryState.filter.isActive;
-        return _TabButton(
-          label: _labelFor(tab),
-          active: isActiveTab,
-          onTap: () {
-            ref.read(currentSectionProvider.notifier).state =
-                AppSection.library;
-            ref.read(libraryControllerProvider.notifier).setTab(tab);
-          },
-        );
-      }).toList(),
-    );
-
     final search = SizedBox(
       width: isMobile ? double.infinity : 240,
       height: 36,
@@ -67,7 +51,7 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
         style: TextStyle(fontSize: 13.5, color: petal.colors.ink),
         decoration: InputDecoration(
           isDense: true,
-          hintText: 'Search your library',
+          hintText: l10n.searchLibrary,
           hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13.5),
           prefixIcon: Icon(Icons.search, size: 18, color: petal.colors.ink3),
           filled: true,
@@ -102,23 +86,11 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
           onPressed: () => ref.read(currentSectionProvider.notifier).state =
               AppSection.settings,
         ),
-        GestureDetector(
+        ProfileAvatar(
+          session: session,
+          radius: 15,
           onTap: () => ref.read(currentSectionProvider.notifier).state =
               AppSection.settings,
-          child: CircleAvatar(
-            radius: 15,
-            backgroundColor: petal.colors.surface2,
-            child: session == null
-                ? Icon(Icons.person_outline, size: 16, color: petal.colors.ink2)
-                : Text(
-                    session.email.substring(0, 1).toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: petal.colors.ink,
-                    ),
-                  ),
-          ),
         ),
       ],
     );
@@ -159,7 +131,7 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
                           .map(
                             (tab) => PopupMenuItem(
                               value: tab,
-                              child: Text(_labelFor(tab)),
+                              child: Text(_labelFor(context, tab)),
                             ),
                           )
                           .toList(),
@@ -174,7 +146,7 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _labelFor(libraryState.tab),
+                              _labelFor(context, libraryState.tab),
                               style: petal.text.tabLabelActive,
                             ),
                             const SizedBox(width: 4),
@@ -190,8 +162,6 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
           : Row(
               children: [
                 brand,
-                const SizedBox(width: 20),
-                tabs,
                 const Spacer(),
                 search,
                 const SizedBox(width: 8),
@@ -203,42 +173,15 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     return container;
   }
 
-  String _labelFor(LibraryTab tab) => switch (tab) {
-    LibraryTab.songs => 'Songs',
-    LibraryTab.artists => 'Artists',
-    LibraryTab.genres => 'Genres',
-    LibraryTab.playlists => 'Playlists',
-    LibraryTab.favorites => 'Favorites',
-  };
-}
-
-class _TabButton extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _TabButton({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final petal = context.petal;
-    return Material(
-      color: active ? petal.colors.surface2 : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Text(
-            label,
-            style: active ? petal.text.tabLabelActive : petal.text.tabLabel,
-          ),
-        ),
-      ),
-    );
+  String _labelFor(BuildContext context, LibraryTab tab) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (tab) {
+      LibraryTab.songs => l10n.songs,
+      LibraryTab.artists => l10n.artists,
+      LibraryTab.albums => l10n.albums,
+      LibraryTab.genres => l10n.genres,
+      LibraryTab.playlists => l10n.playlists,
+      LibraryTab.favorites => l10n.favoriteSongs,
+    };
   }
 }

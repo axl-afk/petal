@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/services/window/window_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_controller.dart';
 import '../../state/cloud_sync_controller.dart';
 import '../../state/nav_controller.dart';
@@ -200,6 +201,7 @@ class _MobileNavigation extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final section = ref.watch(currentSectionProvider);
+    final l10n = AppLocalizations.of(context)!;
     final selected = switch (section) {
       AppSection.library => 0,
       AppSection.nowPlaying || AppSection.lyrics => 1,
@@ -219,26 +221,26 @@ class _MobileNavigation extends ConsumerWidget {
           _ => AppSection.settings,
         };
       },
-      destinations: const [
+      destinations: [
         NavigationDestination(
-          icon: Icon(Icons.library_music_outlined),
-          selectedIcon: Icon(Icons.library_music),
-          label: 'Library',
+          icon: const Icon(Icons.library_music_outlined),
+          selectedIcon: const Icon(Icons.library_music),
+          label: l10n.library,
         ),
         NavigationDestination(
-          icon: Icon(Icons.album_outlined),
-          selectedIcon: Icon(Icons.album),
-          label: 'Playing',
+          icon: const Icon(Icons.album_outlined),
+          selectedIcon: const Icon(Icons.album),
+          label: l10n.playing,
         ),
         NavigationDestination(
-          icon: Icon(Icons.add_circle_outline),
-          selectedIcon: Icon(Icons.add_circle),
-          label: 'Add',
+          icon: const Icon(Icons.add_circle_outline),
+          selectedIcon: const Icon(Icons.add_circle),
+          label: l10n.add,
         ),
         NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: 'Settings',
+          icon: const Icon(Icons.settings_outlined),
+          selectedIcon: const Icon(Icons.settings),
+          label: l10n.settings,
         ),
       ],
     );

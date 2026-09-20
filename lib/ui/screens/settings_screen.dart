@@ -7,9 +7,12 @@ import '../../data/services/prefs_service.dart';
 import '../../state/auth_controller.dart';
 import '../../state/cloud_sync_controller.dart';
 import '../../state/library_controller.dart';
+import '../../state/locale_controller.dart';
 import '../../state/nav_controller.dart';
+import '../../state/profile_controller.dart';
 import '../../state/theme_controller.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/profile_avatar.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -37,20 +40,86 @@ class SettingsScreen extends ConsumerWidget {
 
             _Group(
               title: 'APPEARANCE',
-              child: Row(
-                children: ThemeMode2.values.map((mode) {
-                  final active = themeMode == mode;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(_themeLabel(mode)),
-                      selected: active,
-                      onSelected: (_) => ref
-                          .read(themeControllerProvider.notifier)
-                          .setMode(mode),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    children: ThemeMode2.values.map((mode) {
+                      final active = themeMode == mode;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(_themeLabel(mode)),
+                          selected: active,
+                          onSelected: (_) => ref
+                              .read(themeControllerProvider.notifier)
+                              .setMode(mode),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    value: ref.watch(localeControllerProvider)?.languageCode ?? 'system',
+                    decoration: const InputDecoration(
+                      labelText: 'Language',
+                      prefixIcon: Icon(Icons.translate_rounded),
                     ),
-                  );
-                }).toList(),
+                    items: const [
+                      DropdownMenuItem(value: 'system', child: Text('System language')),
+                      DropdownMenuItem(value: 'en', child: Text('English')),
+                      DropdownMenuItem(value: 'es', child: Text('Español')),
+                      DropdownMenuItem(value: 'hi', child: Text('हिन्दी')),
+                      DropdownMenuItem(value: 'bn', child: Text('বাংলা')),
+                      DropdownMenuItem(value: 'ar', child: Text('العربية')),
+                    ],
+                    onChanged: (value) => ref
+                        .read(localeControllerProvider.notifier)
+                        .setLanguage(value == 'system' ? null : value),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            _Group(
+              title: 'PROFILE PICTURE',
+              child: Row(
+                children: [
+                  ProfileAvatar(session: auth.session, radius: 30),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      'Use your own picture across Petal on this device.',
+                      style: petal.text.cardSubtitle,
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final ok = await ref
+                          .read(profileControllerProvider.notifier)
+                          .chooseImage();
+                      if (!ok && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Choose an image smaller than 5 MB.'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text('Choose'),
+                  ),
+                  if (ref.watch(profileControllerProvider) != null)
+                    IconButton(
+                      tooltip: 'Remove picture',
+                      onPressed: () => ref
+                          .read(profileControllerProvider.notifier)
+                          .removeImage(),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                ],
               ),
             ),
 

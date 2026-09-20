@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
+import '../../data/db/daos/track_dao.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/grid_card.dart';
-import '../widgets/hero_banner.dart';
 import '../widgets/track_table.dart';
 
 class LibraryScreen extends ConsumerWidget {
@@ -28,6 +29,14 @@ class LibraryScreen extends ConsumerWidget {
         eyebrow: 'Artist',
         title: state.filter.artist!,
         subtitle: 'All songs by this artist',
+        showBack: true,
+      );
+    }
+    if (state.filter.album != null) {
+      return _TrackListSection(
+        eyebrow: 'Album',
+        title: state.filter.album!,
+        subtitle: 'Songs on this album',
         showBack: true,
       );
     }
@@ -63,6 +72,8 @@ class LibraryScreen extends ConsumerWidget {
         );
       case LibraryTab.artists:
         return const _ArtistsGrid();
+      case LibraryTab.albums:
+        return const _AlbumsGrid();
       case LibraryTab.genres:
         return const _GenresGrid();
       case LibraryTab.playlists:
@@ -88,35 +99,36 @@ class _TrackListSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tracksAsync = ref.watch(currentTracksStreamProvider);
 
-    // CustomScrollView + slivers rather than a SingleChildScrollView wrapping
-    // a Column: the hero banner is a fixed SliverToBoxAdapter, but the track
-    // list itself (TrackTable) is a SliverList that only builds rows near
-    // the viewport — critical for staying smooth once a library has
-    // thousands of tracks, instead of building every row up front.
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
           sliver: SliverToBoxAdapter(
-            child: HeroBanner(
+            child: _LibraryHeading(
               eyebrow: eyebrow,
-              title: title,
+              title: title == 'Your Music' ? 'Songs' : title,
               subtitle: subtitle,
               showBack: showBack,
-              onBack: () =>
-                  ref.read(libraryControllerProvider.notifier).clearFilter(),
+              onBack: () => ref
+                  .read(libraryControllerProvider.notifier)
+                  .clearFilter(),
               onPlay: () {
-                final tracks = tracksAsync.value ?? [];
-                if (tracks.isEmpty) return;
-                ref
-                    .read(playbackControllerProvider.notifier)
-                    .playQueue(tracks, 0);
+                final tracks = tracksAsync.value ?? const [];
+                if (tracks.isNotEmpty) {
+                  ref
+                      .read(playbackControllerProvider.notifier)
+                      .playQueue(tracks, 0);
+                }
               },
+              sortOrder: ref.watch(libraryControllerProvider).sortOrder,
+              onSort: (order) => ref
+                  .read(libraryControllerProvider.notifier)
+                  .setSortOrder(order),
             ),
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           // skipLoadingOnReload: search-quality review finding — tab/filter/
           // search changes all make currentTracksStreamProvider watch a new
           // underlying DB stream (a "reload", in Riverpod's terms, since it
@@ -145,7 +157,87 @@ class _TrackListSection extends ConsumerWidget {
             ),
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        const SliverToBoxAdapter(child: SizedBox(height: 18)),
+      ],
+    );
+  }
+}
+
+class _LibraryHeading extends StatelessWidget {
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+  final bool showBack;
+  final VoidCallback onBack;
+  final VoidCallback onPlay;
+  final TrackOrder sortOrder;
+  final ValueChanged<TrackOrder> onSort;
+
+  const _LibraryHeading({
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+    required this.showBack,
+    required this.onBack,
+    required this.onPlay,
+    required this.sortOrder,
+    required this.onSort,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return Row(
+      children: [
+        if (showBack) ...[
+          IconButton(
+            tooltip: 'Back',
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          ),
+          const SizedBox(width: 4),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(eyebrow.toUpperCase(), style: petal.text.heroEyebrow),
+              const SizedBox(height: 2),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: petal.text.heroTitle.copyWith(fontSize: 26),
+              ),
+              Text(subtitle, style: petal.text.heroSub),
+            ],
+          ),
+        ),
+        PopupMenuButton<TrackOrder>(
+          tooltip: 'Sort songs',
+          initialValue: sortOrder,
+          onSelected: onSort,
+          itemBuilder: (context) => TrackOrder.values
+              .map(
+                (order) => PopupMenuItem(
+                  value: order,
+                  child: Text(switch (order) {
+                    TrackOrder.title => 'Title',
+                    TrackOrder.artist => 'Artist',
+                    TrackOrder.album => 'Album',
+                    TrackOrder.recentlyAdded => 'Recently added',
+                  }),
+                ),
+              )
+              .toList(),
+          icon: const Icon(Icons.sort_rounded),
+        ),
+        const SizedBox(width: 6),
+        FilledButton.icon(
+          onPressed: onPlay,
+          icon: const Icon(Icons.play_arrow_rounded),
+          label: const Text('Play all'),
+        ),
       ],
     );
   }
@@ -204,6 +296,34 @@ class _GenresGrid extends ConsumerWidget {
   }
 }
 
+class _AlbumsGrid extends ConsumerWidget {
+  const _AlbumsGrid();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final albumsAsync = ref.watch(albumsStreamProvider);
+    return albumsAsync.when(
+      data: (albums) => _Grid(
+        itemCount: albums.length,
+        itemBuilder: (context, i) {
+          final album = albums[i];
+          return GridCard(
+            icon: Icons.album_outlined,
+            title: album.album,
+            subtitle:
+                '${album.artist} · ${album.trackCount} song${album.trackCount == 1 ? '' : 's'}',
+            onTap: () => ref
+                .read(libraryControllerProvider.notifier)
+                .filterByAlbum(album.album),
+          );
+        },
+      ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('$e')),
+    );
+  }
+}
+
 class _PlaylistsGrid extends ConsumerWidget {
   const _PlaylistsGrid();
   @override
@@ -218,6 +338,9 @@ class _PlaylistsGrid extends ConsumerWidget {
             icon: Icons.queue_music,
             title: p.name,
             subtitle: 'Playlist',
+            imageBytes: p.artworkData == null
+                ? null
+                : base64Decode(p.artworkData!),
             onTap: () => ref
                 .read(libraryControllerProvider.notifier)
                 .filterByPlaylist(p.id, p.name),

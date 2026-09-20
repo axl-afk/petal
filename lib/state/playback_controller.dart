@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:audio_service/audio_service.dart';
 
 import '../data/db/app_database.dart';
 import '../data/db/daos/track_dao.dart';
@@ -22,6 +24,7 @@ class PlaybackState {
   final String? error;
   final bool shuffleEnabled;
   final LoopMode loopMode;
+  final int lyricsOffsetMs;
 
   const PlaybackState({
     this.current,
@@ -33,6 +36,7 @@ class PlaybackState {
     this.error,
     this.shuffleEnabled = false,
     this.loopMode = LoopMode.off,
+    this.lyricsOffsetMs = 0,
   });
 
   bool get hasNext => index >= 0 && index < queue.length - 1;
@@ -51,6 +55,7 @@ class PlaybackState {
     bool clearError = false,
     bool? shuffleEnabled,
     LoopMode? loopMode,
+    int? lyricsOffsetMs,
   }) {
     return PlaybackState(
       current: clearCurrent ? null : (current ?? this.current),
@@ -62,6 +67,7 @@ class PlaybackState {
       error: clearError ? null : (error ?? this.error),
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
       loopMode: loopMode ?? this.loopMode,
+      lyricsOffsetMs: lyricsOffsetMs ?? this.lyricsOffsetMs,
     );
   }
 }
@@ -75,7 +81,8 @@ class PlaybackState {
 /// [player].durationStream directly via a StreamBuilder, keeping this
 /// notifier's rebuilds cheap.
 class PlaybackController extends StateNotifier<PlaybackState> {
-  final AudioPlayer player = AudioPlayer();
+  late final AudioPlayer player;
+  AndroidEqualizer? _equalizer;
   final TrackDao _trackDao;
   final LyricsService _lyricsService;
   final GoogleAuthService _googleAuth;
@@ -87,6 +94,14 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     this._googleAuth,
     this._microsoftAuth,
   ) : super(const PlaybackState()) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      _equalizer = AndroidEqualizer();
+      player = AudioPlayer(
+        audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer!]),
+      );
+    } else {
+      player = AudioPlayer();
+    }
     player.playerStateStream.listen((s) {
       state = state.copyWith(
         isPlaying: s.playing,
@@ -106,6 +121,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       queue: queue,
       index: startIndex,
       current: queue[startIndex],
+      lyricsOffsetMs: queue[startIndex].lyricsOffsetMs,
       clearLyrics: true,
       clearError: true,
     );
@@ -134,6 +150,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     state = state.copyWith(
       index: index,
       current: state.queue[index],
+      lyricsOffsetMs: state.queue[index].lyricsOffsetMs,
       clearLyrics: true,
       clearError: true,
     );
@@ -155,6 +172,36 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   Future<void> setVolume(double volume) => player.setVolume(volume.clamp(0, 1));
+
+  bool get supportsEqualizer => _equalizer != null;
+
+  Future<AndroidEqualizerParameters?> equalizerParameters() async {
+    final equalizer = _equalizer;
+    if (equalizer == null) return null;
+    await equalizer.setEnabled(true);
+    return equalizer.parameters;
+  }
+
+  Future<void> setEqualizerEnabled(bool enabled) async {
+    await _equalizer?.setEnabled(enabled);
+  }
+
+  Future<void> applyEqualizerPreset(List<double> normalizedGains) async {
+    final parameters = await equalizerParameters();
+    if (parameters == null || normalizedGains.isEmpty) return;
+    for (var i = 0; i < parameters.bands.length; i++) {
+      final normalized = normalizedGains[
+        (i * normalizedGains.length ~/ parameters.bands.length)
+            .clamp(0, normalizedGains.length - 1)
+      ].clamp(-1.0, 1.0).toDouble();
+      final gain = normalized >= 0
+          ? normalized * parameters.maxDecibels
+          : -normalized.abs() * parameters.minDecibels.abs();
+      await parameters.bands[i].setGain(gain
+          .clamp(parameters.minDecibels, parameters.maxDecibels)
+          .toDouble());
+    }
+  }
 
   Future<void> next() async {
     if (state.loopMode == LoopMode.one && state.current != null) {
@@ -192,41 +239,78 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   /// playback if it was paused, matching the approved design's "clicking a
   /// lyric plays the song from there" behavior.
   Future<void> seekToLyricLine(LyricLine line) async {
-    await seek(line.time);
+    await seek(line.time - Duration(milliseconds: state.lyricsOffsetMs));
     if (!state.isPlaying) await player.play();
+  }
+
+  Future<void> adjustLyricsOffset(int deltaMs) async {
+    final track = state.current;
+    if (track == null) return;
+    final next = (state.lyricsOffsetMs + deltaMs).clamp(-10000, 10000);
+    state = state.copyWith(lyricsOffsetMs: next);
+    await _trackDao.setLyricsOffset(track.id, next);
+  }
+
+  void reflectFavorite(String trackId, bool isFavorite) {
+    final current = state.current;
+    final updatedQueue = state.queue
+        .map((track) => track.id == trackId
+            ? track.copyWith(isFavorite: isFavorite)
+            : track)
+        .toList(growable: false);
+    state = state.copyWith(
+      current: current?.id == trackId
+          ? current!.copyWith(isFavorite: isFavorite)
+          : current,
+      queue: updatedQueue,
+    );
   }
 
   Future<void> _loadCurrentAndPlay() async {
     final track = state.current;
     if (track == null) return;
     try {
+      Uri source;
+      Map<String, String>? headers;
       if (track.downloadedPath != null && track.downloadedPath!.isNotEmpty) {
-        await player.setFilePath(track.downloadedPath!);
+        source = Uri.file(track.downloadedPath!);
       } else if (track.sourceType == TrackSourceType.local) {
-        if (Uri.tryParse(track.sourceUri)?.scheme == 'content') {
-          await player.setUrl(track.sourceUri);
-        } else {
-          await player.setFilePath(track.sourceUri);
-        }
+        final parsed = Uri.tryParse(track.sourceUri);
+        source = parsed != null && parsed.scheme.isNotEmpty
+            ? parsed
+            : Uri.file(track.sourceUri);
       } else if (track.sourceType == TrackSourceType.googleDrive) {
         final token = await _googleAuth.refreshAccessToken();
         if (token == null)
           throw StateError('Google access expired. Sign in again.');
-        await player.setUrl(
-          track.sourceUri,
-          headers: {'Authorization': 'Bearer $token'},
-        );
+        source = Uri.parse(track.sourceUri);
+        headers = {'Authorization': 'Bearer $token'};
       } else if (track.sourceType == TrackSourceType.oneDrive) {
         final token = await _microsoftAuth.accessToken();
         if (token == null)
           throw StateError('Microsoft access expired. Sign in again.');
-        await player.setUrl(
-          track.sourceUri,
-          headers: {'Authorization': 'Bearer $token'},
-        );
+        source = Uri.parse(track.sourceUri);
+        headers = {'Authorization': 'Bearer $token'};
       } else {
-        await player.setUrl(track.sourceUri);
+        source = Uri.parse(track.sourceUri);
       }
+      await player.setAudioSource(
+        AudioSource.uri(
+          source,
+          headers: headers,
+          tag: MediaItem(
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album.isEmpty ? null : track.album,
+            duration: track.duration.inMilliseconds > 0
+                ? track.duration
+                : null,
+            artUri: _artworkUri(track.artworkUrl),
+            playable: true,
+          ),
+        ),
+      );
       await player.play();
       state = state.copyWith(clearError: true);
     } catch (e) {
@@ -236,6 +320,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       );
     }
     unawaited(_loadLyricsFor(track));
+  }
+
+  Uri? _artworkUri(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.scheme.isNotEmpty) return parsed;
+    return Uri.file(raw);
   }
 
   Future<void> _loadLyricsFor(Track track) async {

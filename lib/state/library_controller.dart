@@ -22,6 +22,7 @@ import '../data/services/local_file_service.dart';
 import '../utils/id_gen.dart';
 import 'auth_controller.dart';
 import 'cloud_sync_controller.dart';
+import 'playback_controller.dart';
 import 'providers.dart';
 
 /// Result of a local import batch — how many files were found vs. actually
@@ -32,23 +33,26 @@ class ImportResult {
   const ImportResult({required this.found, required this.imported});
 }
 
-enum LibraryTab { songs, artists, genres, playlists, favorites }
+enum LibraryTab { favorites, songs, artists, albums, genres, playlists }
 
 class LibraryFilter {
   final String? artist;
+  final String? album;
   final String? genre;
   final String? playlistId;
   final String? playlistName;
 
   const LibraryFilter({
     this.artist,
+    this.album,
     this.genre,
     this.playlistId,
     this.playlistName,
   });
   static const none = LibraryFilter();
 
-  bool get isActive => artist != null || genre != null || playlistId != null;
+  bool get isActive =>
+      artist != null || album != null || genre != null || playlistId != null;
 }
 
 class LibraryState {
@@ -59,6 +63,7 @@ class LibraryState {
   final int cloudScanDiscovered;
   final String? cloudScanError;
   final DateTime? lastCloudScanAt;
+  final TrackOrder sortOrder;
 
   const LibraryState({
     this.tab = LibraryTab.songs,
@@ -68,6 +73,7 @@ class LibraryState {
     this.cloudScanDiscovered = 0,
     this.cloudScanError,
     this.lastCloudScanAt,
+    this.sortOrder = TrackOrder.title,
   });
 
   LibraryState copyWith({
@@ -79,6 +85,7 @@ class LibraryState {
     String? cloudScanError,
     bool clearCloudScanError = false,
     DateTime? lastCloudScanAt,
+    TrackOrder? sortOrder,
   }) => LibraryState(
     tab: tab ?? this.tab,
     filter: filter ?? this.filter,
@@ -89,6 +96,7 @@ class LibraryState {
         ? null
         : (cloudScanError ?? this.cloudScanError),
     lastCloudScanAt: lastCloudScanAt ?? this.lastCloudScanAt,
+    sortOrder: sortOrder ?? this.sortOrder,
   );
 
   bool get isSearching => searchQuery.trim().isNotEmpty;
@@ -179,6 +187,14 @@ class LibraryController extends StateNotifier<LibraryState> {
     );
   }
 
+  void filterByAlbum(String album) {
+    _searchDebounce?.cancel();
+    state = state.copyWith(
+      tab: LibraryTab.songs,
+      filter: LibraryFilter(album: album),
+    );
+  }
+
   void filterByPlaylist(String id, String name) {
     _searchDebounce?.cancel();
     state = state.copyWith(
@@ -190,6 +206,10 @@ class LibraryController extends StateNotifier<LibraryState> {
   void clearFilter() {
     _searchDebounce?.cancel();
     state = state.copyWith(filter: LibraryFilter.none);
+  }
+
+  void setSortOrder(TrackOrder order) {
+    state = state.copyWith(sortOrder: order);
   }
 
   /// Debounced: the query only actually reaches [state] (and therefore
@@ -218,16 +238,22 @@ class LibraryController extends StateNotifier<LibraryState> {
       return playlistDao.watchTracks(state.filter.playlistId!);
     if (state.filter.artist != null)
       return trackDao.watchByArtist(state.filter.artist!);
+    if (state.filter.album != null)
+      return trackDao.watchByAlbum(state.filter.album!);
     if (state.filter.genre != null)
       return trackDao.watchByGenre(state.filter.genre!);
     if (state.tab == LibraryTab.favorites) return trackDao.watchFavorites();
-    return trackDao.watchAll();
+    return trackDao.watchAll(order: state.sortOrder);
   }
 
   // --- mutations ----------------------------------------------------------
 
   Future<void> toggleFavorite(Track track) async {
-    await trackDao.setFavorite(track.id, !track.isFavorite);
+    final next = !track.isFavorite;
+    await trackDao.setFavorite(track.id, next);
+    _ref
+        .read(playbackControllerProvider.notifier)
+        .reflectFavorite(track.id, next);
     // Only cloud-sourced tracks (ids from idForCloudSource, see
     // connectLink) are part of what gets backed up — skip scheduling a
     // Drive write for a purely local-file favorite, which buildSnapshot()
@@ -638,7 +664,8 @@ class LibraryController extends StateNotifier<LibraryState> {
   // no tracks yet, and buildSnapshot() skips any playlist with no
   // cloud-portable tracks in it, so there'd be nothing new to back up until
   // addTrackToPlaylist (below) actually adds one.
-  Future<Playlist> createPlaylist(String name) => playlistDao.create(name);
+  Future<Playlist> createPlaylist(String name, {String? artworkData}) =>
+      playlistDao.create(name, artworkData: artworkData);
 
   /// Called on sign-out — see TrackDao.deleteForAccount's doc comment for
   /// why this is necessary (and safe) for a shared-device scenario.
@@ -678,6 +705,10 @@ final artistsStreamProvider = StreamProvider<List<ArtistSummary>>((ref) {
 
 final genresStreamProvider = StreamProvider<List<GenreSummary>>((ref) {
   return ref.watch(trackDaoProvider).watchGenres();
+});
+
+final albumsStreamProvider = StreamProvider<List<AlbumSummary>>((ref) {
+  return ref.watch(trackDaoProvider).watchAlbums();
 });
 
 final playlistsStreamProvider = StreamProvider<List<Playlist>>((ref) {

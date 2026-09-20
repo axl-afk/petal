@@ -1,0 +1,12 @@
+{
+  "@@locale": "bn",
+  "library": "লাইব্রেরি", "playing": "চলছে", "add": "যোগ করুন", "settings": "সেটিংস",
+  "search": "খুঁজুন", "home": "হোম", "favoriteSongs": "পছন্দের গান", "songs": "গান",
+  "artists": "শিল্পী", "albums": "অ্যালবাম", "genres": "ধরন", "allPlaylists": "সব প্লেলিস্ট",
+  "sources": "উৎস", "thisDevice": "এই ডিভাইস", "addSource": "উৎস যোগ করুন", "playlists": "প্লেলিস্ট",
+  "newPlaylist": "নতুন প্লেলিস্ট", "searchLibrary": "লাইব্রেরিতে খুঁজুন", "playAll": "সব চালান",
+  "title": "শিরোনাম", "album": "অ্যালবাম", "nothingHere": "এখনও কিছু নেই।",
+  "addOrScan": "একটি উৎস যোগ করুন বা এই ডিভাইসে গান স্ক্যান করুন।", "previous": "আগের", "next": "পরের",
+  "play": "চালান", "pause": "বিরতি", "fullScreen": "পূর্ণ পর্দা", "language": "ভাষা",
+  "systemLanguage": "সিস্টেমের ভাষা", "appearance": "চেহারা", "account": "অ্যাকাউন্ট", "about": "সম্পর্কে"
+}
