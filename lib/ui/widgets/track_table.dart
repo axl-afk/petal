@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/db/app_database.dart';
+import '../../data/db/tables.dart';
 import '../../data/models/track_extensions.dart';
 import '../../state/library_controller.dart';
 import '../../state/download_controller.dart';
