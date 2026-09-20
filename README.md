@@ -1,8 +1,28 @@
 # Petal
 
 A cross-platform music player (macOS, Windows, Linux, Android, iOS, and web)
-that plays local files or pasted Google Drive / OneDrive share links, with
-real time-synced lyrics.
+that unifies device music, Google Drive, and OneDrive in one library, with
+offline cloud downloads, cross-device metadata sync, and time-synced lyrics.
+
+The current rebuild plan and acceptance criteria live in
+[`PETAL_MASTER_IMPLEMENTATION_BRIEF.md`](PETAL_MASTER_IMPLEMENTATION_BRIEF.md).
+
+### Current capabilities
+
+- Android MediaStore discovery plus file/folder import on supported devices.
+- Paginated Google Drive and OneDrive account scanning after explicit OAuth consent.
+- Authenticated cloud streaming and persistent offline downloads.
+- Portable favorites/playlists/library metadata stored in the user's own Google Drive app-data or OneDrive app folder—no Petal account server.
+- Responsive phone/tablet/desktop navigation and layered frosted-glass surfaces.
+
+OAuth client IDs are build-time configuration, not source-code secrets:
+
+```bash
+flutter run \
+  --dart-define=PETAL_GOOGLE_CLIENT_ID=your-google-client-id \
+  --dart-define=PETAL_MICROSOFT_CLIENT_ID=your-microsoft-client-id \
+  --dart-define=PETAL_MICROSOFT_REDIRECT_URI=petalauth://auth
+```
 
 ## License
 

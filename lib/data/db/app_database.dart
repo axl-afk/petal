@@ -29,49 +29,74 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.withExecutor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async {
-          await m.createAll();
-          await _createFts();
-          await _createIndices();
-        },
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            // Re-scope the tracks_au trigger (see _createFts's doc comment)
-            // to only fire on the columns tracks_fts actually indexes,
-            // instead of on every write to the tracks table. An install
-            // that already created its DB under schema 1 has this trigger
-            // under the same name already, so _createFts's own `CREATE
-            // TRIGGER IF NOT EXISTS` would silently never apply the fix —
-            // drop it explicitly first so the recreate actually takes.
-            await customStatement('DROP TRIGGER IF EXISTS tracks_au');
-            await _createFts();
-          }
-        },
-        beforeOpen: (details) async {
-          await customStatement('PRAGMA foreign_keys = ON');
-          // WAL lets the FTS sync triggers (writes) and the Library screen's
-          // reactive stream queries (reads) proceed without blocking each
-          // other — the whole reason drift/just_audio/riverpod's "watch a
-          // query, rebuild on change" pattern stays smooth under real use.
-          // No-op (and harmless) on backends where it doesn't apply.
-          await customStatement('PRAGMA journal_mode=WAL');
-        },
-      );
+    onCreate: (m) async {
+      await m.createAll();
+      await _createFts();
+      await _createIndices();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        // Re-scope the tracks_au trigger (see _createFts's doc comment)
+        // to only fire on the columns tracks_fts actually indexes,
+        // instead of on every write to the tracks table. An install
+        // that already created its DB under schema 1 has this trigger
+        // under the same name already, so _createFts's own `CREATE
+        // TRIGGER IF NOT EXISTS` would silently never apply the fix —
+        // drop it explicitly first so the recreate actually takes.
+        await customStatement('DROP TRIGGER IF EXISTS tracks_au');
+        await _createFts();
+      }
+      if (from < 3) {
+        await m.addColumn(tracks, tracks.providerItemId);
+        await m.addColumn(tracks, tracks.mimeType);
+        await m.addColumn(tracks, tracks.fileSizeBytes);
+        await m.addColumn(tracks, tracks.remoteModifiedAt);
+        await m.addColumn(tracks, tracks.downloadedPath);
+        await _createIndices();
+      }
+    },
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+      // WAL lets the FTS sync triggers (writes) and the Library screen's
+      // reactive stream queries (reads) proceed without blocking each
+      // other — the whole reason drift/just_audio/riverpod's "watch a
+      // query, rebuild on change" pattern stays smooth under real use.
+      // No-op (and harmless) on backends where it doesn't apply.
+      await customStatement('PRAGMA journal_mode=WAL');
+    },
+  );
 
   Future<void> _createIndices() async {
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_tracks_genre ON tracks(genre)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_tracks_favorite ON tracks(is_favorite)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_tracks_owner_account ON tracks(owner_account)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tracks_genre ON tracks(genre)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tracks_favorite ON tracks(is_favorite)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tracks_owner_account ON tracks(owner_account)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_provider_item '
+      'ON tracks(owner_account, source_type, provider_item_id) '
+      'WHERE provider_item_id IS NOT NULL',
+    );
     // The composite primary key on playlist_tracks(playlist_id, track_id)
     // already gives SQLite a fast path for "tracks in this playlist" (the
     // common case, watchTracks()); this covers the reverse lookup direction.
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_playlist_tracks_track ON playlist_tracks(track_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_saved_sources_account ON saved_sources(account_email)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_playlist_tracks_track ON playlist_tracks(track_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_saved_sources_account ON saved_sources(account_email)',
+    );
   }
 
   Future<void> _createFts() async {

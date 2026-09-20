@@ -45,6 +45,9 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   Future<Track?> getById(String id) =>
       (select(tracks)..where((t) => t.id.equals(id))).getSingleOrNull();
 
+  Future<List<Track>> getForAccount(String accountEmail) =>
+      (select(tracks)..where((t) => t.ownerAccount.equals(accountEmail))).get();
+
   Stream<List<ArtistSummary>> watchArtists() {
     final count = tracks.id.count();
     final query = selectOnly(tracks)
@@ -52,10 +55,10 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
       ..groupBy([tracks.artist])
       ..orderBy([OrderingTerm.asc(tracks.artist)]);
     return query.watch().map(
-          (rows) => rows
-              .map((r) => ArtistSummary(r.read(tracks.artist)!, r.read(count)!))
-              .toList(),
-        );
+      (rows) => rows
+          .map((r) => ArtistSummary(r.read(tracks.artist)!, r.read(count)!))
+          .toList(),
+    );
   }
 
   Stream<List<GenreSummary>> watchGenres() {
@@ -66,10 +69,10 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
       ..groupBy([tracks.genre])
       ..orderBy([OrderingTerm.asc(tracks.genre)]);
     return query.watch().map(
-          (rows) => rows
-              .map((r) => GenreSummary(r.read(tracks.genre)!, r.read(count)!))
-              .toList(),
-        );
+      (rows) => rows
+          .map((r) => GenreSummary(r.read(tracks.genre)!, r.read(count)!))
+          .toList(),
+    );
   }
 
   /// Full-text search over title/artist/album/genre using the tracks_fts
@@ -122,8 +125,13 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   Stream<List<Track>> _watchLikeSearch(String query) {
     final like = '%${query.replaceAll('%', '').replaceAll('_', '')}%';
     return (select(tracks)
-          ..where((t) =>
-              t.title.like(like) | t.artist.like(like) | t.album.like(like) | t.genre.like(like))
+          ..where(
+            (t) =>
+                t.title.like(like) |
+                t.artist.like(like) |
+                t.album.like(like) |
+                t.genre.like(like),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.title)]))
         .watch();
   }
@@ -171,7 +179,9 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
     await transaction(() async {
       for (final item in items) {
         final id = item.id.value;
-        final existing = await (select(tracks)..where((t) => t.id.equals(id))).getSingleOrNull();
+        final existing = await (select(
+          tracks,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
         if (existing == null) {
           await into(tracks).insert(item);
         } else {
@@ -184,6 +194,10 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
               durationMs: item.durationMs,
               sourceUri: item.sourceUri,
               artworkUrl: item.artworkUrl,
+              providerItemId: item.providerItemId,
+              mimeType: item.mimeType,
+              fileSizeBytes: item.fileSizeBytes,
+              remoteModifiedAt: item.remoteModifiedAt,
             ),
           );
         }
@@ -211,11 +225,17 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
       (delete(tracks)..where((t) => t.ownerAccount.equals(accountEmail))).go();
 
   Future<void> setFavorite(String id, bool value) =>
-      (update(tracks)..where((t) => t.id.equals(id)))
-          .write(TracksCompanion(isFavorite: Value(value)));
+      (update(tracks)..where((t) => t.id.equals(id))).write(
+        TracksCompanion(isFavorite: Value(value)),
+      );
 
   Future<void> cacheLyrics(String id, {String? lrc, String? plain}) =>
       (update(tracks)..where((t) => t.id.equals(id))).write(
         TracksCompanion(lyricsLrc: Value(lrc), lyricsPlain: Value(plain)),
+      );
+
+  Future<void> setDownloadedPath(String id, String? path) =>
+      (update(tracks)..where((t) => t.id.equals(id))).write(
+        TracksCompanion(downloadedPath: Value(path)),
       );
 }

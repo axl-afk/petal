@@ -8,6 +8,7 @@ import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../utils/breakpoints.dart';
 import '../../utils/ui_scale.dart';
+import '../../theme/app_theme.dart';
 import '../screens/add_source_screen.dart';
 import '../screens/library_screen.dart';
 import '../screens/lyrics_screen.dart';
@@ -59,68 +60,89 @@ class AppShell extends ConsumerWidget {
       // this is defensive, not a fix for a known engine bug) — a no-op
       // ValueNotifier that never changes on web/mobile, so this has zero
       // effect there.
-      body: ValueListenableBuilder<int>(
-        valueListenable: WindowService.rebuildTick,
-        builder: (context, _, __) => SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final isMobile = Breakpoints.isMobile(width);
-            final showRail = !isMobile;
-            final showRightRail = Breakpoints.isDesktop(width);
-            final scale = UiScale.forWidth(width);
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(-0.75, -0.9),
+            radius: 1.55,
+            colors: [
+              context.petal.colors.accent.withOpacity(
+                Theme.of(context).brightness == Brightness.dark ? 0.13 : 0.10,
+              ),
+              context.petal.colors.ground,
+            ],
+          ),
+        ),
+        child: ValueListenableBuilder<int>(
+          valueListenable: WindowService.rebuildTick,
+          builder: (context, _, __) => SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final isMobile = Breakpoints.isMobile(width);
+                final showRail = !isMobile;
+                final showRightRail = Breakpoints.isDesktop(width);
+                final scale = UiScale.forWidth(width);
 
-            return UiScale(
-              value: scale,
-              child: MediaQuery(
-                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
-                child: Column(
-                  children: [
-                    TopBar(isMobile: isMobile),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (showRail) const SideRail(),
-                          Expanded(
-                            // Cross-fades + a small upward slide between
-                            // sections (library <-> now playing <-> lyrics
-                            // <-> settings/add source) instead of an
-                            // instant swap — the same nav model
-                            // (currentSectionProvider, no Navigator routes)
-                            // just with a transition. Keyed on `section` so
-                            // AnimatedSwitcher treats each section as a
-                            // distinct child and actually animates between
-                            // them rather than rebuilding one in place.
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 220),
-                              switchInCurve: Curves.easeOut,
-                              switchOutCurve: Curves.easeIn,
-                              transitionBuilder: (child, animation) => FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: Tween<Offset>(begin: const Offset(0, 0.02), end: Offset.zero).animate(animation),
-                                  child: child,
+                return UiScale(
+                  value: scale,
+                  child: MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(scale)),
+                    child: Column(
+                      children: [
+                        TopBar(isMobile: isMobile),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (showRail) const SideRail(),
+                              Expanded(
+                                // Cross-fades + a small upward slide between
+                                // sections (library <-> now playing <-> lyrics
+                                // <-> settings/add source) instead of an
+                                // instant swap — the same nav model
+                                // (currentSectionProvider, no Navigator routes)
+                                // just with a transition. Keyed on `section` so
+                                // AnimatedSwitcher treats each section as a
+                                // distinct child and actually animates between
+                                // them rather than rebuilding one in place.
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeOut,
+                                  switchOutCurve: Curves.easeIn,
+                                  transitionBuilder: (child, animation) =>
+                                      FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(0, 0.02),
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
+                                        ),
+                                      ),
+                                  child: KeyedSubtree(
+                                    key: ValueKey(section),
+                                    child: _MainContent(section: section),
+                                  ),
                                 ),
                               ),
-                              child: KeyedSubtree(
-                                key: ValueKey(section),
-                                child: _MainContent(section: section),
-                              ),
-                            ),
+                              if (showRightRail) const RightRail(),
+                            ],
                           ),
-                          if (showRightRail) const RightRail(),
-                        ],
-                      ),
+                        ),
+                        if (section != AppSection.nowPlaying)
+                          const MiniPlayer(),
+                        if (isMobile) const _MobileNavigation(),
+                      ],
                     ),
-                    if (section != AppSection.nowPlaying) const MiniPlayer(),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -137,6 +159,57 @@ class AppShell extends ConsumerWidget {
           duration: const Duration(seconds: 6),
         ),
       );
+  }
+}
+
+class _MobileNavigation extends ConsumerWidget {
+  const _MobileNavigation();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final section = ref.watch(currentSectionProvider);
+    final selected = switch (section) {
+      AppSection.library => 0,
+      AppSection.nowPlaying || AppSection.lyrics => 1,
+      AppSection.addSource => 2,
+      AppSection.settings => 3,
+    };
+    return NavigationBar(
+      height: 66,
+      backgroundColor: context.petal.colors.surface.withOpacity(0.88),
+      indicatorColor: context.petal.colors.accent.withOpacity(0.22),
+      selectedIndex: selected,
+      onDestinationSelected: (index) {
+        ref.read(currentSectionProvider.notifier).state = switch (index) {
+          0 => AppSection.library,
+          1 => AppSection.nowPlaying,
+          2 => AppSection.addSource,
+          _ => AppSection.settings,
+        };
+      },
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.library_music_outlined),
+          selectedIcon: Icon(Icons.library_music),
+          label: 'Library',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.album_outlined),
+          selectedIcon: Icon(Icons.album),
+          label: 'Playing',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.add_circle_outline),
+          selectedIcon: Icon(Icons.add_circle),
+          label: 'Add',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: 'Settings',
+        ),
+      ],
+    );
   }
 }
 

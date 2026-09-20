@@ -7,6 +7,8 @@ import '../data/db/tables.dart';
 import '../data/models/lyric_line.dart';
 import '../data/models/track_extensions.dart';
 import '../data/services/lyrics_service.dart';
+import '../data/services/auth/google_auth_service.dart';
+import '../data/services/auth/microsoft_auth_service.dart';
 import '../utils/lyric_sync.dart';
 import 'providers.dart';
 
@@ -68,12 +70,20 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   final AudioPlayer player = AudioPlayer();
   final TrackDao _trackDao;
   final LyricsService _lyricsService;
+  final GoogleAuthService _googleAuth;
+  final MicrosoftAuthService _microsoftAuth;
 
-  PlaybackController(this._trackDao, this._lyricsService) : super(const PlaybackState()) {
+  PlaybackController(
+    this._trackDao,
+    this._lyricsService,
+    this._googleAuth,
+    this._microsoftAuth,
+  ) : super(const PlaybackState()) {
     player.playerStateStream.listen((s) {
       state = state.copyWith(
         isPlaying: s.playing,
-        isBuffering: s.processingState == ProcessingState.loading ||
+        isBuffering:
+            s.processingState == ProcessingState.loading ||
             s.processingState == ProcessingState.buffering,
       );
       if (s.processingState == ProcessingState.completed) {
@@ -84,7 +94,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   Future<void> playQueue(List<Track> queue, int startIndex) async {
     if (queue.isEmpty || startIndex < 0 || startIndex >= queue.length) return;
-    state = state.copyWith(queue: queue, index: startIndex, current: queue[startIndex], clearLyrics: true, clearError: true);
+    state = state.copyWith(
+      queue: queue,
+      index: startIndex,
+      current: queue[startIndex],
+      clearLyrics: true,
+      clearError: true,
+    );
     await _loadCurrentAndPlay();
   }
 
@@ -112,7 +128,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       return;
     }
     final nextIndex = state.index + 1;
-    state = state.copyWith(index: nextIndex, current: state.queue[nextIndex], clearLyrics: true);
+    state = state.copyWith(
+      index: nextIndex,
+      current: state.queue[nextIndex],
+      clearLyrics: true,
+    );
     await _loadCurrentAndPlay();
   }
 
@@ -122,7 +142,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       return;
     }
     final prevIndex = state.index - 1;
-    state = state.copyWith(index: prevIndex, current: state.queue[prevIndex], clearLyrics: true);
+    state = state.copyWith(
+      index: prevIndex,
+      current: state.queue[prevIndex],
+      clearLyrics: true,
+    );
     await _loadCurrentAndPlay();
   }
 
@@ -138,15 +162,40 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     final track = state.current;
     if (track == null) return;
     try {
-      if (track.sourceType == TrackSourceType.local) {
-        await player.setFilePath(track.sourceUri);
+      if (track.downloadedPath != null && track.downloadedPath!.isNotEmpty) {
+        await player.setFilePath(track.downloadedPath!);
+      } else if (track.sourceType == TrackSourceType.local) {
+        if (Uri.tryParse(track.sourceUri)?.scheme == 'content') {
+          await player.setUrl(track.sourceUri);
+        } else {
+          await player.setFilePath(track.sourceUri);
+        }
+      } else if (track.sourceType == TrackSourceType.googleDrive) {
+        final token = await _googleAuth.refreshAccessToken();
+        if (token == null)
+          throw StateError('Google access expired. Sign in again.');
+        await player.setUrl(
+          track.sourceUri,
+          headers: {'Authorization': 'Bearer $token'},
+        );
+      } else if (track.sourceType == TrackSourceType.oneDrive) {
+        final token = await _microsoftAuth.accessToken();
+        if (token == null)
+          throw StateError('Microsoft access expired. Sign in again.');
+        await player.setUrl(
+          track.sourceUri,
+          headers: {'Authorization': 'Bearer $token'},
+        );
       } else {
         await player.setUrl(track.sourceUri);
       }
       await player.play();
       state = state.copyWith(clearError: true);
     } catch (e) {
-      state = state.copyWith(isPlaying: false, error: 'Could not play "${track.title}": $e');
+      state = state.copyWith(
+        isPlaying: false,
+        error: 'Could not play "${track.title}": $e',
+      );
     }
     unawaited(_loadLyricsFor(track));
   }
@@ -173,7 +222,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       duration: track.duration,
     );
 
-    if (state.current?.id != track.id) return; // user moved on before this resolved
+    if (state.current?.id != track.id)
+      return; // user moved on before this resolved
     state = state.copyWith(lyrics: result);
 
     if (result.isSynced) {
@@ -192,9 +242,15 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
 void unawaited(Future<void> future) {}
 
-final playbackControllerProvider = StateNotifierProvider<PlaybackController, PlaybackState>((ref) {
-  // Riverpod calls PlaybackController.dispose() (which disposes the
-  // AudioPlayer) automatically when this provider is torn down — no need to
-  // register a second ref.onDispose here.
-  return PlaybackController(ref.watch(trackDaoProvider), ref.watch(lyricsServiceProvider));
-});
+final playbackControllerProvider =
+    StateNotifierProvider<PlaybackController, PlaybackState>((ref) {
+      // Riverpod calls PlaybackController.dispose() (which disposes the
+      // AudioPlayer) automatically when this provider is torn down — no need to
+      // register a second ref.onDispose here.
+      return PlaybackController(
+        ref.watch(trackDaoProvider),
+        ref.watch(lyricsServiceProvider),
+        ref.watch(googleAuthServiceProvider),
+        ref.watch(microsoftAuthServiceProvider),
+      );
+    });
