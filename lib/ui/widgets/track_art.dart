@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../../data/db/app_database.dart';
+import '../../data/services/device_media_service.dart';
 import '../../theme/app_theme.dart';
 import 'track_art_local.dart';
 
@@ -51,6 +54,71 @@ class TrackArt extends StatelessWidget {
       );
     }
 
+    if (url.startsWith('content://')) {
+      return _ContentArtwork(
+        uri: url,
+        size: size,
+        radius: radius,
+        placeholder: placeholder,
+      );
+    }
+
     return buildLocalTrackArt(path: url, size: size, radius: radius, placeholder: placeholder);
+  }
+}
+
+class _ContentArtwork extends StatefulWidget {
+  final String uri;
+  final double size;
+  final BorderRadius radius;
+  final Widget Function() placeholder;
+
+  const _ContentArtwork({
+    required this.uri,
+    required this.size,
+    required this.radius,
+    required this.placeholder,
+  });
+
+  @override
+  State<_ContentArtwork> createState() => _ContentArtworkState();
+}
+
+class _ContentArtworkState extends State<_ContentArtwork> {
+  late Future<Uint8List?> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = DeviceMediaService().loadArtwork(widget.uri);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ContentArtwork oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uri != widget.uri) {
+      _bytes = DeviceMediaService().loadArtwork(widget.uri);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: _bytes,
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        if (bytes == null) return widget.placeholder();
+        return ClipRRect(
+          borderRadius: widget.radius,
+          child: Image.memory(
+            bytes,
+            width: widget.size,
+            height: widget.size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => widget.placeholder(),
+          ),
+        );
+      },
+    );
   }
 }
