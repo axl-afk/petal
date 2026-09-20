@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/services/window/window_service.dart';
 import '../../state/auth_controller.dart';
@@ -76,10 +77,26 @@ class AppShell extends ConsumerWidget {
         child: ValueListenableBuilder<int>(
           valueListenable: WindowService.rebuildTick,
           builder: (context, _, __) => SafeArea(
-            child: LayoutBuilder(
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.space): () {
+                  if (!_editingText()) {
+                    ref.read(playbackControllerProvider.notifier).togglePlayPause();
+                  }
+                },
+                const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true):
+                    () => ref.read(playbackControllerProvider.notifier).next(),
+                const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+                    () => ref.read(playbackControllerProvider.notifier).previous(),
+              },
+              child: Focus(
+                autofocus: true,
+                child: LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
                 final isMobile = Breakpoints.isMobile(width);
+                final immersive = section == AppSection.nowPlaying ||
+                    section == AppSection.lyrics;
                 final showRail = !isMobile;
                 final showRightRail = Breakpoints.isDesktop(width);
                 final scale = UiScale.forWidth(width);
@@ -89,7 +106,15 @@ class AppShell extends ConsumerWidget {
                   child: MediaQuery(
                     data: MediaQuery.of(context)
                         .copyWith(textScaler: TextScaler.linear(scale)),
-                    child: Column(
+                    child: immersive
+                        ? AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 260),
+                            child: KeyedSubtree(
+                              key: ValueKey(section),
+                              child: _MainContent(section: section),
+                            ),
+                          )
+                        : Column(
                       children: [
                         TopBar(isMobile: isMobile),
                         const Divider(height: 1),
@@ -133,8 +158,7 @@ class AppShell extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        if (section != AppSection.nowPlaying)
-                          const MiniPlayer(),
+                        const MiniPlayer(),
                         if (isMobile) const _MobileNavigation(),
                       ],
                     ),
@@ -142,10 +166,18 @@ class AppShell extends ConsumerWidget {
                 );
               },
             ),
+              ),
+            ),
           ),
         ),
       ),
     );
+  }
+
+  bool _editingText() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    return context?.widget is EditableText ||
+        context?.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
   void _showErrorSnackBar(BuildContext context, String message) {
