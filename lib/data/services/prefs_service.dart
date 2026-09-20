@@ -12,6 +12,8 @@ class PrefsService {
   static const _kSession = 'petal_session_v1';
   static const _kTheme = 'petal_theme_v1';
   static const _kOnboarded = 'petal_onboarded_v1';
+  static const _kLanguage = 'petal_language_v1';
+  static const _kProfileImage = 'petal_profile_image_v1';
 
   final SharedPreferences _prefs;
   PrefsService(this._prefs);
@@ -52,4 +54,16 @@ class PrefsService {
   bool loadHasOnboarded() => _prefs.getBool(_kOnboarded) ?? false;
 
   Future<void> saveHasOnboarded() => _prefs.setBool(_kOnboarded, true);
+
+  String? loadLanguageCode() => _prefs.getString(_kLanguage);
+
+  Future<void> saveLanguageCode(String? code) => code == null
+      ? _prefs.remove(_kLanguage)
+      : _prefs.setString(_kLanguage, code);
+
+  String? loadProfileImage() => _prefs.getString(_kProfileImage);
+
+  Future<void> saveProfileImage(String? encoded) => encoded == null
+      ? _prefs.remove(_kProfileImage)
+      : _prefs.setString(_kProfileImage, encoded);
 }

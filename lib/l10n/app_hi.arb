@@ -1,0 +1,12 @@
+{
+  "@@locale": "hi",
+  "library": "लाइब्रेरी", "playing": "चल रहा है", "add": "जोड़ें", "settings": "सेटिंग्स",
+  "search": "खोजें", "home": "होम", "favoriteSongs": "पसंदीदा गाने", "songs": "गाने",
+  "artists": "कलाकार", "albums": "एल्बम", "genres": "शैलियाँ", "allPlaylists": "सभी प्लेलिस्ट",
+  "sources": "स्रोत", "thisDevice": "यह डिवाइस", "addSource": "स्रोत जोड़ें", "playlists": "प्लेलिस्ट",
+  "newPlaylist": "नई प्लेलिस्ट", "searchLibrary": "अपनी लाइब्रेरी खोजें", "playAll": "सभी चलाएँ",
+  "title": "शीर्षक", "album": "एल्बम", "nothingHere": "अभी यहाँ कुछ नहीं है।",
+  "addOrScan": "स्रोत जोड़ें या इस डिवाइस में संगीत खोजें।", "previous": "पिछला", "next": "अगला",
+  "play": "चलाएँ", "pause": "रोकें", "fullScreen": "पूर्ण स्क्रीन", "language": "भाषा",
+  "systemLanguage": "सिस्टम भाषा", "appearance": "दिखावट", "account": "खाता", "about": "जानकारी"
+}

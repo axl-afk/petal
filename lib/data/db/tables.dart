@@ -45,6 +45,7 @@ class Tracks extends Table {
   /// Cached synced lyrics, stored as LRC text so we don't re-fetch every play.
   TextColumn get lyricsLrc => text().nullable()();
   TextColumn get lyricsPlain => text().nullable()();
+  IntColumn get lyricsOffsetMs => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -54,6 +55,7 @@ class Tracks extends Table {
 class Playlists extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
+  TextColumn get artworkData => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override

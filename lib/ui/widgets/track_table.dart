@@ -17,8 +17,7 @@ import 'track_art.dart';
 /// different underlying stream, matching how the approved design reused one
 /// track-table component everywhere rather than bespoke layouts per section.
 ///
-/// This is a *sliver* — meant to sit inside a CustomScrollView alongside the
-/// hero banner (see library_screen.dart) — specifically so a library of
+/// This is a *sliver* — meant to sit inside a CustomScrollView — so a library of
 /// thousands of tracks only ever builds the rows currently on/near screen
 /// (SliverChildBuilderDelegate), rather than eagerly building every row up
 /// front the way a plain Column inside a ScrollView would.
@@ -31,11 +30,20 @@ class TrackTable extends ConsumerWidget {
     final petal = context.petal;
 
     if (tracks.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Center(
-            child: Text('Nothing here yet.', style: petal.text.meta),
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.library_music_outlined,
+                  size: 42, color: petal.colors.ink3),
+              const SizedBox(height: 12),
+              Text('Nothing here yet.', style: petal.text.sectionTitle),
+              const SizedBox(height: 4),
+              Text('Add a source or scan this device for music.',
+                  style: petal.text.meta),
+            ],
           ),
         ),
       );
@@ -49,7 +57,10 @@ class TrackTable extends ConsumerWidget {
     final downloads = ref.watch(downloadControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
 
-    return SliverList(
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(child: _TrackHeader(showDetails: MediaQuery.sizeOf(context).width >= 720)),
+        SliverList(
       delegate: SliverChildBuilderDelegate((context, i) {
         final track = tracks[i];
         return _TrackRow(
@@ -72,8 +83,94 @@ class TrackTable extends ConsumerWidget {
               ref.read(downloadControllerProvider.notifier).remove(track),
         );
       }, childCount: tracks.length),
+        ),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: const _TableRemainder(),
+        ),
+      ],
     );
   }
+}
+
+class _TrackHeader extends StatelessWidget {
+  final bool showDetails;
+  const _TrackHeader({required this.showDetails});
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: petal.colors.surface.withOpacity(.66),
+        border: Border.symmetric(
+          horizontal: BorderSide(color: petal.colors.hairline),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(width: 28, child: Text('#', style: petal.text.meta)),
+          const SizedBox(width: 54),
+          Expanded(flex: 3, child: Text('Title', style: petal.text.meta)),
+          if (showDetails) ...[
+            Expanded(flex: 2, child: Text('Album', style: petal.text.meta)),
+            SizedBox(
+              width: 70,
+              child: Icon(Icons.schedule_rounded,
+                  size: 14, color: petal.colors.ink3),
+            ),
+          ],
+          const SizedBox(width: 34),
+          const SizedBox(width: 36),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableRemainder extends StatelessWidget {
+  const _TableRemainder();
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return CustomPaint(
+      painter: _TableStripePainter(
+        first: Colors.transparent,
+        second: petal.colors.surface.withOpacity(.24),
+        rowHeight: 52,
+      ),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+class _TableStripePainter extends CustomPainter {
+  final Color first;
+  final Color second;
+  final double rowHeight;
+  const _TableStripePainter({
+    required this.first,
+    required this.second,
+    required this.rowHeight,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (double y = 0; y < size.height; y += rowHeight) {
+      final odd = (y ~/ rowHeight).isOdd;
+      canvas.drawRect(
+        Rect.fromLTWH(0, y, size.width, rowHeight),
+        Paint()..color = odd ? second : first,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TableStripePainter oldDelegate) =>
+      oldDelegate.second != second || oldDelegate.rowHeight != rowHeight;
 }
 
 class _TrackRow extends StatefulWidget {

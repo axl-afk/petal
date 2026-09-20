@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../data/db/app_database.dart';
 import '../../state/nav_controller.dart';
@@ -16,21 +17,22 @@ class LyricsScreen extends ConsumerStatefulWidget {
 }
 
 class _LyricsScreenState extends ConsumerState<LyricsScreen> {
-  final _scrollController = ScrollController();
+  final _itemScrollController = ItemScrollController();
   int _lastScrolledIndex = -1;
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   void _maybeAutoScroll(int activeIndex, int totalLines) {
-    if (activeIndex < 0 || activeIndex == _lastScrolledIndex || !_scrollController.hasClients) return;
+    if (activeIndex < 0 ||
+        activeIndex == _lastScrolledIndex ||
+        !_itemScrollController.isAttached) {
+      return;
+    }
     _lastScrolledIndex = activeIndex;
-    const lineHeight = 64.0;
-    final target = (activeIndex * lineHeight - 160).clamp(0.0, _scrollController.position.maxScrollExtent);
-    _scrollController.animateTo(target, duration: const Duration(milliseconds: 320), curve: Curves.easeOut);
+    _itemScrollController.scrollTo(
+      index: activeIndex,
+      alignment: .34,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -70,10 +72,24 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: 'Lyrics earlier by 0.25 seconds',
+                onPressed: () => controller.adjustLyricsOffset(-250),
+                icon: const Icon(Icons.remove_rounded),
+              ),
+              Text(
+                '${playback.lyricsOffsetMs >= 0 ? '+' : ''}${(playback.lyricsOffsetMs / 1000).toStringAsFixed(2)}s',
+                style: petal.text.meta,
+              ),
+              IconButton(
+                tooltip: 'Lyrics later by 0.25 seconds',
+                onPressed: () => controller.adjustLyricsOffset(250),
+                icon: const Icon(Icons.add_rounded),
+              ),
             ],
           ),
         ),
-        Expanded(child: _LyricsBody(track: track, playback: playback, controller: controller, onAutoScroll: _maybeAutoScroll, scrollController: _scrollController)),
+        Expanded(child: _LyricsBody(track: track, playback: playback, controller: controller, onAutoScroll: _maybeAutoScroll, itemScrollController: _itemScrollController)),
       ],
       ),
     );
@@ -85,14 +101,14 @@ class _LyricsBody extends StatelessWidget {
   final PlaybackState playback;
   final PlaybackController controller;
   final void Function(int, int) onAutoScroll;
-  final ScrollController scrollController;
+  final ItemScrollController itemScrollController;
 
   const _LyricsBody({
     required this.track,
     required this.playback,
     required this.controller,
     required this.onAutoScroll,
-    required this.scrollController,
+    required this.itemScrollController,
   });
 
   @override
@@ -117,11 +133,13 @@ class _LyricsBody extends StatelessWidget {
       stream: controller.player.positionStream,
       builder: (context, snapshot) {
         final position = snapshot.data ?? Duration.zero;
-        final activeIndex = currentLyricIndex(lyrics.synced, position);
+        final calibratedPosition = position +
+            Duration(milliseconds: playback.lyricsOffsetMs);
+        final activeIndex = currentLyricIndex(lyrics.synced, calibratedPosition);
         WidgetsBinding.instance.addPostFrameCallback((_) => onAutoScroll(activeIndex, lyrics.synced.length));
 
-        return ListView.builder(
-          controller: scrollController,
+        return ScrollablePositionedList.builder(
+          itemScrollController: itemScrollController,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 140),
           itemCount: lyrics.synced.length,
           itemBuilder: (context, i) {

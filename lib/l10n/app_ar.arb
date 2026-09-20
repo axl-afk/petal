@@ -1,0 +1,12 @@
+{
+  "@@locale": "ar",
+  "library": "المكتبة", "playing": "قيد التشغيل", "add": "إضافة", "settings": "الإعدادات",
+  "search": "بحث", "home": "الرئيسية", "favoriteSongs": "الأغاني المفضلة", "songs": "الأغاني",
+  "artists": "الفنانون", "albums": "الألبومات", "genres": "الأنواع", "allPlaylists": "كل قوائم التشغيل",
+  "sources": "المصادر", "thisDevice": "هذا الجهاز", "addSource": "إضافة مصدر", "playlists": "قوائم التشغيل",
+  "newPlaylist": "قائمة تشغيل جديدة", "searchLibrary": "ابحث في مكتبتك", "playAll": "تشغيل الكل",
+  "title": "العنوان", "album": "الألبوم", "nothingHere": "لا يوجد شيء هنا بعد.",
+  "addOrScan": "أضف مصدراً أو افحص هذا الجهاز بحثاً عن الموسيقى.", "previous": "السابق", "next": "التالي",
+  "play": "تشغيل", "pause": "إيقاف مؤقت", "fullScreen": "ملء الشاشة", "language": "اللغة",
+  "systemLanguage": "لغة النظام", "appearance": "المظهر", "account": "الحساب", "about": "حول"
+}

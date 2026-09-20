@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Desktop-only window chrome: a minimum window size (so the player can't
@@ -40,6 +41,7 @@ class WindowService {
   static final ValueNotifier<int> rebuildTick = ValueNotifier<int>(0);
 
   static bool _initialized = false;
+  static bool _mobileFullscreen = false;
 
   static Future<void> ensureInitialized() async {
     if (!_isDesktop || _initialized) return;
@@ -47,6 +49,23 @@ class WindowService {
     await windowManager.ensureInitialized();
     await windowManager.setMinimumSize(minimumSize);
     windowManager.addListener(_RebuildTickListener());
+  }
+
+  static Future<void> toggleFullscreen() async {
+    if (_isDesktop) {
+      final fullscreen = await windowManager.isFullScreen();
+      await windowManager.setFullScreen(!fullscreen);
+      return;
+    }
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      _mobileFullscreen = !_mobileFullscreen;
+      await SystemChrome.setEnabledSystemUIMode(
+        _mobileFullscreen
+            ? SystemUiMode.immersiveSticky
+            : SystemUiMode.edgeToEdge,
+      );
+    }
   }
 }
 

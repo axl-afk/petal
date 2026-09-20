@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:convert';
 
 import '../../data/models/auth_session.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
@@ -15,8 +18,10 @@ class SideRail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final petal = context.petal;
+    final l10n = AppLocalizations.of(context)!;
     final session = ref.watch(authControllerProvider).session;
     final playlistsAsync = ref.watch(playlistsStreamProvider);
+    final library = ref.watch(libraryControllerProvider);
 
     final localConnected = !kIsWeb;
     final driveConnected = session?.provider == AuthProviderKind.google;
@@ -31,19 +36,67 @@ class SideRail extends ConsumerWidget {
       ),
       child: ListView(
         children: [
-          _SectionLabel('SOURCES'),
-          _SourceRow(icon: Icons.laptop_mac, label: 'Local files', connected: localConnected, locked: kIsWeb),
-          _SourceRow(icon: Icons.cloud_outlined, label: 'Google Drive', connected: driveConnected, locked: false),
-          _SourceRow(icon: Icons.cloud_queue, label: 'OneDrive', connected: oneDriveConnected, locked: false),
           _RailAction(
-            icon: Icons.add,
-            label: 'Add a source',
-            onTap: () => ref.read(currentSectionProvider.notifier).state = AppSection.addSource,
+            icon: Icons.search_rounded,
+            label: l10n.search,
+            onTap: () => ref.read(currentSectionProvider.notifier).state =
+                AppSection.library,
           ),
-          const SizedBox(height: 22),
+          _RailAction(
+            icon: Icons.home_outlined,
+            label: l10n.home,
+            selected: !library.filter.isActive &&
+                library.tab == LibraryTab.songs,
+            onTap: () {
+              ref.read(currentSectionProvider.notifier).state =
+                  AppSection.library;
+              ref
+                  .read(libraryControllerProvider.notifier)
+                  .setTab(LibraryTab.songs);
+            },
+          ),
+          const SizedBox(height: 16),
+          _SectionLabel(l10n.library.toUpperCase()),
+          _LibraryRow(
+            icon: Icons.favorite_outline_rounded,
+            label: l10n.favoriteSongs,
+            tab: LibraryTab.favorites,
+            activeTab: library.tab,
+          ),
+          _LibraryRow(
+            icon: Icons.music_note_rounded,
+            label: l10n.songs,
+            tab: LibraryTab.songs,
+            activeTab: library.tab,
+          ),
+          _LibraryRow(
+            icon: Icons.mic_none_rounded,
+            label: l10n.artists,
+            tab: LibraryTab.artists,
+            activeTab: library.tab,
+          ),
+          _LibraryRow(
+            icon: Icons.album_outlined,
+            label: l10n.albums,
+            tab: LibraryTab.albums,
+            activeTab: library.tab,
+          ),
+          _LibraryRow(
+            icon: Icons.grid_view_rounded,
+            label: l10n.genres,
+            tab: LibraryTab.genres,
+            activeTab: library.tab,
+          ),
+          _LibraryRow(
+            icon: Icons.queue_music_rounded,
+            label: l10n.allPlaylists,
+            tab: LibraryTab.playlists,
+            activeTab: library.tab,
+          ),
+          const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: _SectionLabel('PLAYLISTS')),
+              Expanded(child: _SectionLabel(l10n.playlists.toUpperCase())),
               IconButton(
                 iconSize: 16,
                 padding: EdgeInsets.zero,
@@ -71,14 +124,15 @@ class SideRail extends ConsumerWidget {
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
+          _SectionLabel(l10n.sources.toUpperCase()),
+          _SourceRow(icon: Icons.phone_android_rounded, label: l10n.thisDevice, connected: localConnected, locked: kIsWeb),
+          _SourceRow(icon: Icons.cloud_outlined, label: 'Google Drive', connected: driveConnected, locked: false),
+          _SourceRow(icon: Icons.cloud_queue, label: 'OneDrive', connected: oneDriveConnected, locked: false),
           _RailAction(
-            icon: Icons.favorite_border,
-            label: 'Favorites',
-            onTap: () {
-              ref.read(currentSectionProvider.notifier).state = AppSection.library;
-              ref.read(libraryControllerProvider.notifier).setTab(LibraryTab.favorites);
-            },
+            icon: Icons.add,
+            label: l10n.addSource,
+            onTap: () => ref.read(currentSectionProvider.notifier).state = AppSection.addSource,
           ),
         ],
       ),
@@ -87,21 +141,77 @@ class SideRail extends ConsumerWidget {
 
   Future<void> _createPlaylist(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController();
-    final name = await showDialog<String>(
+    String? artworkData;
+    final draft = await showDialog<_PlaylistDraft>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New playlist'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(hintText: 'Playlist name')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Create')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('New playlist'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () async {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.image,
+                      withData: true,
+                    );
+                    final bytes = result?.files.single.bytes;
+                    if (bytes != null && bytes.length <= 5 * 1024 * 1024) {
+                      setDialogState(() => artworkData = base64Encode(bytes));
+                    }
+                  },
+                  child: Container(
+                    width: 132,
+                    height: 132,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: artworkData == null
+                        ? const Icon(Icons.add_photo_alternate_outlined, size: 38)
+                        : Image.memory(base64Decode(artworkData!), fit: BoxFit.cover),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: 'Playlist name'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                ctx,
+                _PlaylistDraft(controller.text, artworkData),
+              ),
+              child: const Text('Create'),
+            ),
+          ],
+        ),
       ),
     );
-    if (name != null && name.trim().isNotEmpty) {
-      await ref.read(libraryControllerProvider.notifier).createPlaylist(name.trim());
+    if (draft != null && draft.name.trim().isNotEmpty) {
+      await ref.read(libraryControllerProvider.notifier).createPlaylist(
+            draft.name.trim(),
+            artworkData: draft.artworkData,
+          );
     }
   }
+}
+
+class _PlaylistDraft {
+  final String name;
+  final String? artworkData;
+  const _PlaylistDraft(this.name, this.artworkData);
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -155,13 +265,14 @@ class _RailAction extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _RailAction({required this.icon, required this.label, required this.onTap});
+  final bool selected;
+  const _RailAction({required this.icon, required this.label, required this.onTap, this.selected = false});
 
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
     return Material(
-      color: Colors.transparent,
+      color: selected ? petal.colors.surface2 : Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
@@ -169,15 +280,43 @@ class _RailAction extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: petal.colors.ink2),
+              Icon(icon, size: 18, color: selected ? petal.colors.accent : petal.colors.ink2),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(label, overflow: TextOverflow.ellipsis, style: petal.text.trackSubtitle.copyWith(color: petal.colors.ink)),
+                  child: Text(label, overflow: TextOverflow.ellipsis, style: petal.text.trackSubtitle.copyWith(color: petal.colors.ink, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _LibraryRow extends ConsumerWidget {
+  final IconData icon;
+  final String label;
+  final LibraryTab tab;
+  final LibraryTab activeTab;
+
+  const _LibraryRow({
+    required this.icon,
+    required this.label,
+    required this.tab,
+    required this.activeTab,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _RailAction(
+      icon: icon,
+      label: label,
+      selected: tab == activeTab &&
+          !ref.watch(libraryControllerProvider).filter.isActive,
+      onTap: () {
+        ref.read(currentSectionProvider.notifier).state = AppSection.library;
+        ref.read(libraryControllerProvider.notifier).setTab(tab);
+      },
     );
   }
 }

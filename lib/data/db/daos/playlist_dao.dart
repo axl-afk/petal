@@ -12,10 +12,11 @@ class PlaylistDao extends DatabaseAccessor<AppDatabase> with _$PlaylistDaoMixin 
   Stream<List<Playlist>> watchAll() =>
       (select(playlists)..orderBy([(p) => OrderingTerm.desc(p.createdAt)])).watch();
 
-  Future<Playlist> create(String name) async {
+  Future<Playlist> create(String name, {String? artworkData}) async {
     final playlist = PlaylistsCompanion.insert(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       name: name,
+      artworkData: Value(artworkData),
     );
     await into(playlists).insert(playlist);
     return (select(playlists)..where((p) => p.id.equals(playlist.id.value))).getSingle();
@@ -24,6 +25,11 @@ class PlaylistDao extends DatabaseAccessor<AppDatabase> with _$PlaylistDaoMixin 
   Future<void> rename(String id, String name) =>
       (update(playlists)..where((p) => p.id.equals(id)))
           .write(PlaylistsCompanion(name: Value(name)));
+
+  Future<void> updateArtwork(String id, String? artworkData) =>
+      (update(playlists)..where((p) => p.id.equals(id))).write(
+        PlaylistsCompanion(artworkData: Value(artworkData)),
+      );
 
   /// Creates a playlist with a caller-chosen id if one doesn't already
   /// exist with that id — unlike [create] (which always mints its own id),

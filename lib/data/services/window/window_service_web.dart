@@ -8,4 +8,6 @@ class WindowService {
   static final ValueNotifier<int> rebuildTick = ValueNotifier<int>(0);
 
   static Future<void> ensureInitialized() async {}
+
+  static Future<void> toggleFullscreen() async {}
 }
