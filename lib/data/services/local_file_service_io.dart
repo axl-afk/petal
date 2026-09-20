@@ -48,6 +48,25 @@ class LocalFileService {
       // A subfolder we don't have permission to read, or it vanished mid-scan
       // — keep whatever was already found rather than failing the whole scan.
     }
+
+    // Many carefully-organized desktop libraries store one cover image next
+    // to the album rather than embedding it in every audio file. Treat the
+    // conventional cover/folder/front names as a metadata fallback.
+    if (artworkPath == null) {
+      artworkPath = await _copySidecarArtwork(originalPath, id);
+    }
+
+    // A common tag-less filename convention is "Artist - Title.ext". Keep
+    // the conservative filename fallback, but recover the artist when that
+    // structure is unambiguous.
+    if (artist == 'Unknown Artist') {
+      final stem = p.basenameWithoutExtension(fileName);
+      final separator = stem.indexOf(' - ');
+      if (separator > 0 && separator < stem.length - 3) {
+        artist = stem.substring(0, separator).trim();
+        title = stem.substring(separator + 3).trim();
+      }
+    }
     return found;
   }
 
@@ -291,5 +310,28 @@ class LocalFileService {
     final dir = Directory(p.join(base.path, name));
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
+  }
+
+  Future<String?> _copySidecarArtwork(String audioPath, String id) async {
+    final parent = File(audioPath).parent;
+    if (!await parent.exists()) return null;
+    const preferred = {'cover', 'folder', 'front', 'album'};
+    try {
+      await for (final entity in parent.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final extension = p.extension(entity.path).toLowerCase();
+        if (extension != '.jpg' && extension != '.jpeg' && extension != '.png') continue;
+        if (!preferred.contains(p.basenameWithoutExtension(entity.path).toLowerCase())) continue;
+        if (await entity.length() > 8 * 1024 * 1024) return null;
+        final artDir = await _ensureSubdir('artwork');
+        final targetExtension = extension == '.png' ? '.png' : '.jpg';
+        final target = File(p.join(artDir.path, '$id$targetExtension'));
+        await entity.copy(target.path);
+        return target.path;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 }
