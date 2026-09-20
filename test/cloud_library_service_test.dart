@@ -36,7 +36,10 @@ void main() {
           return http.Response(
             '{"value":['
             '{"id":"audio","name":"Cloud.flac","size":99,'
-            '"file":{"mimeType":"audio/flac"}},'
+            '"file":{"mimeType":"audio/flac"},'
+            '"audio":{"title":"Cloud Song","artist":"Petal Artist",'
+            '"album":"Glass","genre":"Ambient","duration":123000},'
+            '"thumbnails":[{"medium":{"url":"https://img.example/cover.jpg"}}]},'
             '{"id":"folder","name":"Music","folder":{"childCount":1}}'
             ']}',
             200,
@@ -49,6 +52,11 @@ void main() {
       expect(items, hasLength(1));
       expect(items.single.provider, TrackSourceType.oneDrive);
       expect(items.single.streamUri, contains('/items/audio/content'));
+      expect(items.single.title, 'Cloud Song');
+      expect(items.single.resolvedArtist, 'Petal Artist');
+      expect(items.single.album, 'Glass');
+      expect(items.single.durationMs, 123000);
+      expect(items.single.artworkUrl, 'https://img.example/cover.jpg');
     });
 
     test('surfaces expired provider access clearly', () async {
