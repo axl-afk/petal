@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,7 @@ import '../../data/models/resolved_source.dart';
 import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 
 class AddSourceScreen extends ConsumerStatefulWidget {
   const AddSourceScreen({super.key});
@@ -50,17 +52,23 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
     // defeated that before it ever got a chance to run. connectLink still
     // falls back to "Untitled Track" itself when the lookup isn't
     // possible/fails, so behavior is unchanged for every other case.
-    final result = await ref.read(libraryControllerProvider.notifier).connectLink(
+    final result = await ref
+        .read(libraryControllerProvider.notifier)
+        .connectLink(
           rawLink: _linkController.text,
           title: _titleController.text,
-          artist: _artistController.text.isEmpty ? 'Unknown Artist' : _artistController.text,
+          artist: _artistController.text.isEmpty
+              ? 'Unknown Artist'
+              : _artistController.text,
           accountEmail: email,
         );
 
     setState(() {
       _busy = false;
       if (result.ok) {
-        _success = result.isFolderResult ? _folderResultMessage(result) : 'Added — check Songs in your Library.';
+        _success = result.isFolderResult
+            ? _folderResultMessage(result)
+            : 'Added — check Songs in your Library.';
         _linkController.clear();
         _titleController.clear();
         _artistController.clear();
@@ -86,7 +94,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       _localSuccess = null;
     });
     try {
-      final result = await ref.read(libraryControllerProvider.notifier).importLocalFiles();
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .importLocalFiles();
       setState(() => _localSuccess = _resultMessage(result));
     } catch (e) {
       setState(() => _localError = e.toString());
@@ -102,8 +112,12 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       _localSuccess = null;
     });
     try {
-      final result = await ref.read(libraryControllerProvider.notifier).importFolder();
-      setState(() => _localSuccess = result == null ? null : _resultMessage(result));
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .importFolder();
+      setState(
+        () => _localSuccess = result == null ? null : _resultMessage(result),
+      );
     } catch (e) {
       setState(() => _localError = e.toString());
     } finally {
@@ -118,12 +132,14 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       _localSuccess = null;
     });
     try {
-      final result = await ref.read(libraryControllerProvider.notifier).scanPlatformMusicFolder();
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .scanPlatformMusicFolder();
       setState(() {
-        _localSuccess = result == null
-            ? null
-            : _resultMessage(result);
-        _localError = result == null ? 'Couldn\'t find a Music folder on this machine — try "Choose a folder" instead.' : null;
+        _localSuccess = result == null ? null : _resultMessage(result);
+        _localError = result == null
+            ? 'Couldn\'t find a Music folder on this machine — try "Choose a folder" instead.'
+            : null;
       });
     } catch (e) {
       setState(() => _localError = e.toString());
@@ -140,7 +156,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       _wholeComputerProgress = 0;
     });
     try {
-      final result = await ref.read(libraryControllerProvider.notifier).scanWholeComputer(
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .scanWholeComputer(
             // Called from inside the scan, potentially many times a
             // second on a fast disk — setState is cheap enough here since
             // it's just updating one integer Text, not rebuilding the
@@ -149,7 +167,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
               if (mounted) setState(() => _wholeComputerProgress = foundSoFar);
             },
           );
-      setState(() => _localSuccess = result == null ? null : _resultMessage(result));
+      setState(
+        () => _localSuccess = result == null ? null : _resultMessage(result),
+      );
     } catch (e) {
       setState(() => _localError = e.toString());
     } finally {
@@ -157,6 +177,26 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
         _busyLocal = false;
         _wholeComputerProgress = null;
       });
+    }
+  }
+
+  Future<void> _scanDeviceMusic() async {
+    setState(() {
+      _busyLocal = true;
+      _localError = null;
+      _localSuccess = null;
+    });
+    try {
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .scanDeviceMusic();
+      setState(
+        () => _localSuccess = result == null ? null : _resultMessage(result),
+      );
+    } catch (e) {
+      setState(() => _localError = e.toString());
+    } finally {
+      if (mounted) setState(() => _busyLocal = false);
     }
   }
 
@@ -169,6 +209,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.linux);
+
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   String _resultMessage(ImportResult result) {
     if (result.found == 0) return 'No audio files found there.';
@@ -189,7 +232,10 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add a source', style: petal.text.heroTitle.copyWith(fontSize: 22)),
+            Text(
+              'Add a source',
+              style: petal.text.heroTitle.copyWith(fontSize: 22),
+            ),
             const SizedBox(height: 6),
             Text(
               'Paste a single-song share link, a whole Google Drive folder link (needs Google '
@@ -210,9 +256,19 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: _Field(controller: _titleController, hint: 'Title (optional)')),
+                      Expanded(
+                        child: _Field(
+                          controller: _titleController,
+                          hint: 'Title (optional)',
+                        ),
+                      ),
                       const SizedBox(width: 10),
-                      Expanded(child: _Field(controller: _artistController, hint: 'Artist (optional)')),
+                      Expanded(
+                        child: _Field(
+                          controller: _artistController,
+                          hint: 'Artist (optional)',
+                        ),
+                      ),
                     ],
                   ),
                   Padding(
@@ -231,21 +287,44 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                         backgroundColor: petal.colors.accent,
                         foregroundColor: petal.colors.accentInk,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PetalTheme.radiusPill)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            PetalTheme.radiusPill,
+                          ),
+                        ),
                       ),
                       onPressed: _busy ? null : _connect,
                       child: _busy
-                          ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: petal.colors.accentInk))
+                          ? SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: petal.colors.accentInk,
+                              ),
+                            )
                           : const Text('Connect'),
                     ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 10),
-                    Text(_error!, style: TextStyle(color: Colors.redAccent.shade200, fontSize: 12.5)),
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Colors.redAccent.shade200,
+                        fontSize: 12.5,
+                      ),
+                    ),
                   ],
                   if (_success != null) ...[
                     const SizedBox(height: 10),
-                    Text(_success!, style: TextStyle(color: petal.colors.good, fontSize: 12.5)),
+                    Text(
+                      _success!,
+                      style: TextStyle(
+                        color: petal.colors.good,
+                        fontSize: 12.5,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -263,31 +342,54 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Import audio files already on this device.', style: petal.text.cardSubtitle),
+                        Text(
+                          'Import audio files already on this device.',
+                          style: petal.text.cardSubtitle,
+                        ),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 10,
                           runSpacing: 10,
                           children: [
+                            if (_isAndroid)
+                              FilledButton.icon(
+                                onPressed: _busyLocal ? null : _scanDeviceMusic,
+                                icon: const Icon(
+                                  Icons.library_music_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Find device music'),
+                              ),
                             OutlinedButton.icon(
                               onPressed: _busyLocal ? null : _importLocal,
-                              icon: const Icon(Icons.insert_drive_file_outlined, size: 18),
+                              icon: const Icon(
+                                Icons.insert_drive_file_outlined,
+                                size: 18,
+                              ),
                               label: const Text('Choose files'),
                             ),
                             OutlinedButton.icon(
                               onPressed: _busyLocal ? null : _importFolder,
-                              icon: const Icon(Icons.folder_open_outlined, size: 18),
+                              icon: const Icon(
+                                Icons.folder_open_outlined,
+                                size: 18,
+                              ),
                               label: const Text('Choose a folder'),
                             ),
                             if (_isDesktop)
                               OutlinedButton.icon(
                                 onPressed: _busyLocal ? null : _scanMusicFolder,
-                                icon: const Icon(Icons.travel_explore_outlined, size: 18),
+                                icon: const Icon(
+                                  Icons.travel_explore_outlined,
+                                  size: 18,
+                                ),
                                 label: const Text('Scan Music folder'),
                               ),
                             if (_isDesktop)
                               OutlinedButton.icon(
-                                onPressed: _busyLocal ? null : _scanWholeComputer,
+                                onPressed: _busyLocal
+                                    ? null
+                                    : _scanWholeComputer,
                                 icon: const Icon(Icons.dns_outlined, size: 18),
                                 label: const Text('Scan whole computer'),
                               ),
@@ -297,7 +399,14 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: petal.colors.ink2)),
+                              SizedBox(
+                                height: 14,
+                                width: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: petal.colors.ink2,
+                                ),
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 _wholeComputerProgress != null
@@ -315,18 +424,31 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                             'does the same for this machine\'s own Music folder — a quick way to pull in your whole '
                             'existing library without navigating to it by hand. "Scan whole computer" checks every '
                             'drive this machine can see, not just the Music folder — slower, but thorough if your '
-                            'music lives somewhere else. Android/iOS don\'t have an equivalent yet — that needs '
-                            'deeper OS integration (MediaStore / Photos-library access) than a plain folder scan.',
+                            'music lives somewhere else. On Android, “Find device music” reads the system MediaStore. '
+                            'On iPhone and iPad, Apple does not expose a whole-device file scan, so use “Choose files” '
+                            'and the native document picker.',
                             style: petal.text.cardSubtitle,
                           ),
                         ),
                         if (_localError != null) ...[
                           const SizedBox(height: 10),
-                          Text(_localError!, style: TextStyle(color: Colors.redAccent.shade200, fontSize: 12.5)),
+                          Text(
+                            _localError!,
+                            style: TextStyle(
+                              color: Colors.redAccent.shade200,
+                              fontSize: 12.5,
+                            ),
+                          ),
                         ],
                         if (_localSuccess != null) ...[
                           const SizedBox(height: 10),
-                          Text(_localSuccess!, style: TextStyle(color: petal.colors.good, fontSize: 12.5)),
+                          Text(
+                            _localSuccess!,
+                            style: TextStyle(
+                              color: petal.colors.good,
+                              fontSize: 12.5,
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -346,17 +468,18 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
-    return Container(
-      width: double.infinity,
+    return GlassSurface(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: petal.colors.surface, borderRadius: BorderRadius.circular(PetalTheme.radiusCard)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: petal.text.settingsGroupTitle),
-          const SizedBox(height: 12),
-          child,
-        ],
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: petal.text.settingsGroupTitle),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -379,8 +502,14 @@ class _Field extends StatelessWidget {
         hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13),
         filled: true,
         fillColor: petal.colors.surface2,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }

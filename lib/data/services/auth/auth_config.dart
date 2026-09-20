@@ -35,12 +35,31 @@
 library;
 
 class AuthConfig {
-  static const googleWebClientId = 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+  static const googleWebClientId = String.fromEnvironment(
+    'PETAL_GOOGLE_CLIENT_ID',
+    defaultValue: 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com',
+  );
 
-  static const microsoftClientId = 'YOUR_MICROSOFT_APPLICATION_CLIENT_ID';
-  static const microsoftTenant = 'common'; // 'common' = personal + work/school accounts
-  static const microsoftRedirectUri = 'petalauth://auth';
-  static const microsoftScopes = ['openid', 'profile', 'email', 'offline_access'];
+  static const microsoftClientId = String.fromEnvironment(
+    'PETAL_MICROSOFT_CLIENT_ID',
+    defaultValue: 'YOUR_MICROSOFT_APPLICATION_CLIENT_ID',
+  );
+  static const microsoftTenant = String.fromEnvironment(
+    'PETAL_MICROSOFT_TENANT',
+    defaultValue: 'common',
+  );
+  static const microsoftRedirectUri = String.fromEnvironment(
+    'PETAL_MICROSOFT_REDIRECT_URI',
+    defaultValue: 'petalauth://auth',
+  );
+  static const microsoftScopes = [
+    'openid',
+    'profile',
+    'email',
+    'offline_access',
+    'Files.Read',
+    'Files.ReadWrite.AppFolder',
+  ];
 
   static bool get googleConfigured => !googleWebClientId.startsWith('YOUR_');
   static bool get microsoftConfigured => !microsoftClientId.startsWith('YOUR_');

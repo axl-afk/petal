@@ -49,6 +49,7 @@ dependencies:
   # Auth
   google_sign_in: ^6.2.1
   flutter_web_auth_2: ^4.0.0   # generic OAuth2 browser round-trip, used for Microsoft sign-in
+  flutter_secure_storage: ^9.2.4 # OAuth refresh tokens; never SharedPreferences/database
   crypto: ^3.0.5               # PKCE code_challenge generation for Microsoft OAuth
 
   # Networking

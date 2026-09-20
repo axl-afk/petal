@@ -17,23 +17,50 @@ class LibraryScreen extends ConsumerWidget {
     final state = ref.watch(libraryControllerProvider);
 
     if (state.isSearching) {
-      return _TrackListSection(eyebrow: 'Search', title: '"${state.searchQuery}"', subtitle: 'Results across your library');
+      return _TrackListSection(
+        eyebrow: 'Search',
+        title: '"${state.searchQuery}"',
+        subtitle: 'Results across your library',
+      );
     }
     if (state.filter.artist != null) {
-      return _TrackListSection(eyebrow: 'Artist', title: state.filter.artist!, subtitle: 'All songs by this artist', showBack: true);
+      return _TrackListSection(
+        eyebrow: 'Artist',
+        title: state.filter.artist!,
+        subtitle: 'All songs by this artist',
+        showBack: true,
+      );
     }
     if (state.filter.genre != null) {
-      return _TrackListSection(eyebrow: 'Genre', title: state.filter.genre!, subtitle: 'Songs in this genre', showBack: true);
+      return _TrackListSection(
+        eyebrow: 'Genre',
+        title: state.filter.genre!,
+        subtitle: 'Songs in this genre',
+        showBack: true,
+      );
     }
     if (state.filter.playlistId != null) {
-      return _TrackListSection(eyebrow: 'Playlist', title: state.filter.playlistName ?? 'Playlist', subtitle: 'Your playlist', showBack: true);
+      return _TrackListSection(
+        eyebrow: 'Playlist',
+        title: state.filter.playlistName ?? 'Playlist',
+        subtitle: 'Your playlist',
+        showBack: true,
+      );
     }
 
     switch (state.tab) {
       case LibraryTab.songs:
-        return const _TrackListSection(eyebrow: 'Library', title: 'Your Music', subtitle: 'Everything you\'ve added');
+        return const _TrackListSection(
+          eyebrow: 'Library',
+          title: 'Your Music',
+          subtitle: 'Everything you\'ve added',
+        );
       case LibraryTab.favorites:
-        return const _TrackListSection(eyebrow: 'Library', title: 'Favorites', subtitle: 'Songs you\'ve loved');
+        return const _TrackListSection(
+          eyebrow: 'Library',
+          title: 'Favorites',
+          subtitle: 'Songs you\'ve loved',
+        );
       case LibraryTab.artists:
         return const _ArtistsGrid();
       case LibraryTab.genres:
@@ -50,7 +77,12 @@ class _TrackListSection extends ConsumerWidget {
   final String subtitle;
   final bool showBack;
 
-  const _TrackListSection({required this.eyebrow, required this.title, required this.subtitle, this.showBack = false});
+  const _TrackListSection({
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+    this.showBack = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,11 +103,14 @@ class _TrackListSection extends ConsumerWidget {
               title: title,
               subtitle: subtitle,
               showBack: showBack,
-              onBack: () => ref.read(libraryControllerProvider.notifier).clearFilter(),
+              onBack: () =>
+                  ref.read(libraryControllerProvider.notifier).clearFilter(),
               onPlay: () {
                 final tracks = tracksAsync.value ?? [];
                 if (tracks.isEmpty) return;
-                ref.read(playbackControllerProvider.notifier).playQueue(tracks, 0);
+                ref
+                    .read(playbackControllerProvider.notifier)
+                    .playQueue(tracks, 0);
               },
             ),
           ),
@@ -97,10 +132,16 @@ class _TrackListSection extends ConsumerWidget {
             skipLoadingOnReload: true,
             data: (tracks) => TrackTable(tracks: tracks),
             loading: () => const SliverToBoxAdapter(
-              child: Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())),
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(child: CircularProgressIndicator()),
+              ),
             ),
             error: (e, _) => SliverToBoxAdapter(
-              child: Padding(padding: const EdgeInsets.all(40), child: Text('Couldn\'t load your library: $e')),
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Text('Couldn\'t load your library: $e'),
+              ),
             ),
           ),
         ),
@@ -125,7 +166,9 @@ class _ArtistsGrid extends ConsumerWidget {
             icon: Icons.person_outline,
             title: a.artist,
             subtitle: '${a.trackCount} song${a.trackCount == 1 ? '' : 's'}',
-            onTap: () => ref.read(libraryControllerProvider.notifier).filterByArtist(a.artist),
+            onTap: () => ref
+                .read(libraryControllerProvider.notifier)
+                .filterByArtist(a.artist),
           );
         },
       ),
@@ -149,7 +192,9 @@ class _GenresGrid extends ConsumerWidget {
             icon: Icons.grid_view_rounded,
             title: g.genre,
             subtitle: '${g.trackCount} song${g.trackCount == 1 ? '' : 's'}',
-            onTap: () => ref.read(libraryControllerProvider.notifier).filterByGenre(g.genre),
+            onTap: () => ref
+                .read(libraryControllerProvider.notifier)
+                .filterByGenre(g.genre),
           );
         },
       ),
@@ -173,7 +218,9 @@ class _PlaylistsGrid extends ConsumerWidget {
             icon: Icons.queue_music,
             title: p.name,
             subtitle: 'Playlist',
-            onTap: () => ref.read(libraryControllerProvider.notifier).filterByPlaylist(p.id, p.name),
+            onTap: () => ref
+                .read(libraryControllerProvider.notifier)
+                .filterByPlaylist(p.id, p.name),
           );
         },
       ),
@@ -198,18 +245,27 @@ class _Grid extends StatelessWidget {
     if (itemCount == 0) {
       return Center(child: Text('Nothing here yet.', style: petal.text.meta));
     }
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 14,
-          childAspectRatio: 1.1,
-        ),
-        itemCount: itemCount,
-        itemBuilder: itemBuilder,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth < 520
+            ? 2
+            : constraints.maxWidth < 900
+            ? 3
+            : 4;
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              childAspectRatio: columns == 2 ? 1.0 : 1.1,
+            ),
+            itemCount: itemCount,
+            itemBuilder: itemBuilder,
+          ),
+        );
+      },
     );
   }
 }

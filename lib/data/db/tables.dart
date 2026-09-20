@@ -7,7 +7,8 @@ enum TrackSourceType { local, googleDrive, oneDrive, direct }
 class Tracks extends Table {
   TextColumn get id => text()();
   TextColumn get title => text()();
-  TextColumn get artist => text().withDefault(const Constant('Unknown Artist'))();
+  TextColumn get artist =>
+      text().withDefault(const Constant('Unknown Artist'))();
   TextColumn get album => text().withDefault(const Constant(''))();
   TextColumn get genre => text().withDefault(const Constant(''))();
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
@@ -30,6 +31,17 @@ class Tracks extends Table {
   /// libraries stay separate. Null = local-only / no account.
   TextColumn get ownerAccount => text().nullable()();
 
+  /// Stable item id from Drive/Graph. Expiring stream URLs are deliberately
+  /// not used as identity.
+  TextColumn get providerItemId => text().nullable()();
+  TextColumn get mimeType => text().nullable()();
+  IntColumn get fileSizeBytes => integer().withDefault(const Constant(0))();
+  DateTimeColumn get remoteModifiedAt => dateTime().nullable()();
+
+  /// Private app-storage copy used when the user makes a cloud track
+  /// available offline. Null means stream from the provider.
+  TextColumn get downloadedPath => text().nullable()();
+
   /// Cached synced lyrics, stored as LRC text so we don't re-fetch every play.
   TextColumn get lyricsLrc => text().nullable()();
   TextColumn get lyricsPlain => text().nullable()();
@@ -50,8 +62,10 @@ class Playlists extends Table {
 
 @DataClassName('PlaylistTrack')
 class PlaylistTracks extends Table {
-  TextColumn get playlistId => text().references(Playlists, #id, onDelete: KeyAction.cascade)();
-  TextColumn get trackId => text().references(Tracks, #id, onDelete: KeyAction.cascade)();
+  TextColumn get playlistId =>
+      text().references(Playlists, #id, onDelete: KeyAction.cascade)();
+  TextColumn get trackId =>
+      text().references(Tracks, #id, onDelete: KeyAction.cascade)();
   IntColumn get position => integer().withDefault(const Constant(0))();
 
   @override

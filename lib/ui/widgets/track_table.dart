@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/db/app_database.dart';
 import '../../data/models/track_extensions.dart';
 import '../../state/library_controller.dart';
+import '../../state/download_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
@@ -32,7 +33,9 @@ class TrackTable extends ConsumerWidget {
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Center(child: Text('Nothing here yet.', style: petal.text.meta)),
+          child: Center(
+            child: Text('Nothing here yet.', style: petal.text.meta),
+          ),
         ),
       );
     }
@@ -42,25 +45,32 @@ class TrackTable extends ConsumerWidget {
     // playback_controller.dart), so this sliver doesn't rebuild dozens of
     // times a second while something plays.
     final playback = ref.watch(playbackControllerProvider);
+    final downloads = ref.watch(downloadControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, i) {
-          final track = tracks[i];
-          return _TrackRow(
-            key: ValueKey(track.id),
-            index: i + 1,
-            track: track,
-            isCurrent: playback.current?.id == track.id,
-            isPlaying: playback.isPlaying && playback.current?.id == track.id,
-            onPlay: () => controller.playSingle(track, context: tracks),
-            onToggleFavorite: () => ref.read(libraryControllerProvider.notifier).toggleFavorite(track),
-            onOpenNowPlaying: () => ref.read(currentSectionProvider.notifier).state = AppSection.nowPlaying,
-          );
-        },
-        childCount: tracks.length,
-      ),
+      delegate: SliverChildBuilderDelegate((context, i) {
+        final track = tracks[i];
+        return _TrackRow(
+          key: ValueKey(track.id),
+          index: i + 1,
+          track: track,
+          isCurrent: playback.current?.id == track.id,
+          isPlaying: playback.isPlaying && playback.current?.id == track.id,
+          onPlay: () => controller.playSingle(track, context: tracks),
+          onToggleFavorite: () => ref
+              .read(libraryControllerProvider.notifier)
+              .toggleFavorite(track),
+          onOpenNowPlaying: () =>
+              ref.read(currentSectionProvider.notifier).state =
+                  AppSection.nowPlaying,
+          downloadState: downloads[track.id],
+          onDownload: () =>
+              ref.read(downloadControllerProvider.notifier).download(track),
+          onRemoveDownload: () =>
+              ref.read(downloadControllerProvider.notifier).remove(track),
+        );
+      }, childCount: tracks.length),
     );
   }
 }
@@ -73,6 +83,9 @@ class _TrackRow extends StatefulWidget {
   final VoidCallback onPlay;
   final VoidCallback onToggleFavorite;
   final VoidCallback onOpenNowPlaying;
+  final TrackDownloadState? downloadState;
+  final VoidCallback onDownload;
+  final VoidCallback onRemoveDownload;
 
   const _TrackRow({
     super.key,
@@ -83,6 +96,9 @@ class _TrackRow extends StatefulWidget {
     required this.onPlay,
     required this.onToggleFavorite,
     required this.onOpenNowPlaying,
+    required this.downloadState,
+    required this.onDownload,
+    required this.onRemoveDownload,
   });
 
   @override
@@ -96,6 +112,7 @@ class _TrackRowState extends State<_TrackRow> {
   Widget build(BuildContext context) {
     final petal = context.petal;
     final track = widget.track;
+    final compact = MediaQuery.sizeOf(context).width < 720;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
@@ -116,10 +133,17 @@ class _TrackRowState extends State<_TrackRow> {
                       ? IconButton(
                           padding: EdgeInsets.zero,
                           iconSize: 16,
-                          icon: Icon(widget.isPlaying ? Icons.pause : Icons.play_arrow, color: petal.colors.ink),
+                          icon: Icon(
+                            widget.isPlaying ? Icons.pause : Icons.play_arrow,
+                            color: petal.colors.ink,
+                          ),
                           onPressed: widget.onPlay,
                         )
-                      : Text('${widget.index}', style: petal.text.meta, textAlign: TextAlign.center),
+                      : Text(
+                          '${widget.index}',
+                          style: petal.text.meta,
+                          textAlign: TextAlign.center,
+                        ),
                 ),
                 const SizedBox(width: 8),
                 // The actual "playlist view music icon doesn't show up" fix
@@ -128,7 +152,12 @@ class _TrackRowState extends State<_TrackRow> {
                 // unlike MiniPlayer and NowPlayingScreen (both already used
                 // TrackArt). Falls back to the same music-note placeholder
                 // those do when a track has no artwork.
-                TrackArt(track: track, size: 36, iconSize: 16, borderRadius: BorderRadius.circular(6)),
+                TrackArt(
+                  track: track,
+                  size: 36,
+                  iconSize: 16,
+                  borderRadius: BorderRadius.circular(6),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   flex: 3,
@@ -140,35 +169,116 @@ class _TrackRowState extends State<_TrackRow> {
                         track.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: widget.isCurrent ? petal.text.trackTitleCurrent : petal.text.trackTitle,
+                        style: widget.isCurrent
+                            ? petal.text.trackTitleCurrent
+                            : petal.text.trackTitle,
                       ),
-                      Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: petal.text.trackSubtitle),
+                      Text(
+                        track.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: petal.text.trackSubtitle,
+                      ),
                     ],
                   ),
                 ),
-                Expanded(
-                  flex: 2,
-                  child: Text(track.album, maxLines: 1, overflow: TextOverflow.ellipsis, style: petal.text.meta),
-                ),
-                SizedBox(
-                  width: 70,
-                  child: Text(formatDuration(track.duration), style: petal.text.meta, textAlign: TextAlign.right),
-                ),
+                if (!compact) ...[
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      track.album,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: petal.text.meta,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 70,
+                    child: Text(
+                      formatDuration(track.duration),
+                      style: petal.text.meta,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
                 SizedBox(
                   width: 34,
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     iconSize: 16,
-                    icon: Icon(track.isFavorite ? Icons.favorite : Icons.favorite_border),
-                    color: track.isFavorite ? petal.colors.ink : petal.colors.ink3,
+                    icon: Icon(
+                      track.isFavorite ? Icons.favorite : Icons.favorite_border,
+                    ),
+                    color: track.isFavorite
+                        ? petal.colors.ink
+                        : petal.colors.ink3,
                     onPressed: widget.onToggleFavorite,
                   ),
                 ),
+                if (track.sourceType != TrackSourceType.local)
+                  SizedBox(
+                    width: 36,
+                    child: _DownloadButton(
+                      track: track,
+                      state: widget.downloadState,
+                      onDownload: widget.onDownload,
+                      onRemove: widget.onRemoveDownload,
+                    ),
+                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DownloadButton extends StatelessWidget {
+  final Track track;
+  final TrackDownloadState? state;
+  final VoidCallback onDownload;
+  final VoidCallback onRemove;
+
+  const _DownloadButton({
+    required this.track,
+    required this.state,
+    required this.onDownload,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (state?.status == DownloadStatus.downloading) {
+      return Padding(
+        padding: const EdgeInsets.all(9),
+        child: CircularProgressIndicator(
+          value: state!.progress,
+          strokeWidth: 2,
+        ),
+      );
+    }
+    if (state?.status == DownloadStatus.failed) {
+      return IconButton(
+        tooltip: state!.error ?? 'Download failed — tap to retry',
+        iconSize: 18,
+        onPressed: onDownload,
+        icon: const Icon(Icons.cloud_off_outlined, color: Colors.redAccent),
+      );
+    }
+    if (track.downloadedPath != null) {
+      return IconButton(
+        tooltip: 'Available offline — tap to remove download',
+        iconSize: 18,
+        onPressed: onRemove,
+        icon: const Icon(Icons.offline_pin_outlined),
+      );
+    }
+    return IconButton(
+      tooltip: 'Download for offline playback',
+      iconSize: 18,
+      onPressed: onDownload,
+      icon: const Icon(Icons.download_for_offline_outlined),
     );
   }
 }

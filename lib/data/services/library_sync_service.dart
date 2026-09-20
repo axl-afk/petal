@@ -34,7 +34,12 @@ class LibrarySyncService {
   final SourceDao sourceDao;
   final LinkResolverService resolver;
 
-  LibrarySyncService(this.trackDao, this.playlistDao, this.sourceDao, this.resolver);
+  LibrarySyncService(
+    this.trackDao,
+    this.playlistDao,
+    this.sourceDao,
+    this.resolver,
+  );
 
   Future<Map<String, dynamic>> buildSnapshot(String accountEmail) async {
     final sources = await sourceDao.getForAccount(accountEmail);
@@ -54,11 +59,42 @@ class LibrarySyncService {
       });
     }
 
+    final portableTracks = await trackDao.getForAccount(accountEmail);
+    cloudIds.addAll(
+      portableTracks
+          .where((track) => track.sourceType != TrackSourceType.local)
+          .map((track) => track.id),
+    );
+    final trackOut = portableTracks
+        .where((track) => track.sourceType != TrackSourceType.local)
+        .map(
+          (track) => {
+            'id': track.id,
+            'provider': track.sourceType.name,
+            'providerItemId': track.providerItemId,
+            'originUri': track.originUri,
+            'title': track.title,
+            'artist': track.artist,
+            'album': track.album,
+            'genre': track.genre,
+            'durationMs': track.durationMs,
+            'mimeType': track.mimeType,
+            'fileSizeBytes': track.fileSizeBytes,
+            'remoteModifiedAt': track.remoteModifiedAt?.toIso8601String(),
+            'artworkUrl': track.artworkUrl,
+            'isFavorite': track.isFavorite,
+          },
+        )
+        .toList();
+
     final playlists = await playlistDao.watchAll().first;
     final playlistOut = <Map<String, dynamic>>[];
     for (final p in playlists) {
       final tracks = await playlistDao.watchTracks(p.id).first;
-      final trackIds = tracks.map((t) => t.id).where(cloudIds.contains).toList();
+      final trackIds = tracks
+          .map((t) => t.id)
+          .where(cloudIds.contains)
+          .toList();
       if (trackIds.isEmpty) continue; // nothing cloud-portable in this playlist
       playlistOut.add({
         'id': p.id,
@@ -69,14 +105,70 @@ class LibrarySyncService {
     }
 
     return {
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'updatedAt': DateTime.now().toIso8601String(),
+      'tracks': trackOut,
       'sources': sourceOut,
       'playlists': playlistOut,
     };
   }
 
-  Future<void> applySnapshot(Map<String, dynamic> snapshot, String accountEmail) async {
+  Future<void> applySnapshot(
+    Map<String, dynamic> snapshot,
+    String accountEmail,
+  ) async {
+    final tracks = ((snapshot['tracks'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>();
+    for (final item in tracks) {
+      final id = item['id'] as String?;
+      final providerName = item['provider'] as String?;
+      if (id == null || providerName == null) continue;
+      final provider = TrackSourceType.values.firstWhere(
+        (value) => value.name == providerName,
+        orElse: () => TrackSourceType.direct,
+      );
+      final providerItemId = item['providerItemId'] as String?;
+      final originUri = item['originUri'] as String? ?? '';
+      String? streamUri;
+      if (provider == TrackSourceType.googleDrive && providerItemId != null) {
+        streamUri =
+            'https://www.googleapis.com/drive/v3/files/$providerItemId?alt=media';
+      } else if (provider == TrackSourceType.oneDrive &&
+          providerItemId != null) {
+        streamUri =
+            'https://graph.microsoft.com/v1.0/me/drive/items/$providerItemId/content';
+      } else {
+        final resolved = resolver.resolve(originUri);
+        if (resolved.ok) streamUri = resolved.playableUri;
+      }
+      if (streamUri == null) continue;
+
+      await trackDao.upsert(
+        TracksCompanion.insert(
+          id: id,
+          title: (item['title'] as String?)?.trim().isNotEmpty == true
+              ? item['title'] as String
+              : 'Untitled Track',
+          artist: Value(item['artist'] as String? ?? 'Unknown Artist'),
+          album: Value(item['album'] as String? ?? ''),
+          genre: Value(item['genre'] as String? ?? ''),
+          durationMs: Value((item['durationMs'] as num?)?.toInt() ?? 0),
+          sourceType: provider,
+          sourceUri: streamUri,
+          originUri: originUri,
+          ownerAccount: Value(accountEmail),
+          providerItemId: Value(providerItemId),
+          mimeType: Value(item['mimeType'] as String?),
+          fileSizeBytes: Value((item['fileSizeBytes'] as num?)?.toInt() ?? 0),
+          remoteModifiedAt: Value(
+            DateTime.tryParse(item['remoteModifiedAt']?.toString() ?? ''),
+          ),
+          artworkUrl: Value(item['artworkUrl'] as String?),
+          isFavorite: Value(item['isFavorite'] == true),
+        ),
+      );
+    }
+
     final sources = ((snapshot['sources'] as List<dynamic>?) ?? const [])
         .whereType<Map<String, dynamic>>();
 
@@ -95,14 +187,18 @@ class LibrarySyncService {
       );
       final label = s['label'] as String?;
 
-      await trackDao.upsert(TracksCompanion.insert(
-        id: id,
-        title: (label != null && label.trim().isNotEmpty) ? label : 'Untitled Track',
-        sourceType: sourceType,
-        sourceUri: resolved.playableUri!,
-        originUri: rawLink,
-        ownerAccount: Value(accountEmail),
-      ));
+      await trackDao.upsert(
+        TracksCompanion.insert(
+          id: id,
+          title: (label != null && label.trim().isNotEmpty)
+              ? label
+              : 'Untitled Track',
+          sourceType: sourceType,
+          sourceUri: resolved.playableUri!,
+          originUri: rawLink,
+          ownerAccount: Value(accountEmail),
+        ),
+      );
 
       if (s['isFavorite'] == true) {
         await trackDao.setFavorite(id, true);
@@ -125,7 +221,8 @@ class LibrarySyncService {
 
       await playlistDao.ensureExists(id: id, name: name);
 
-      final trackIds = ((p['trackIds'] as List<dynamic>?) ?? const []).whereType<String>();
+      final trackIds = ((p['trackIds'] as List<dynamic>?) ?? const [])
+          .whereType<String>();
       for (final trackId in trackIds) {
         final track = await trackDao.getById(trackId);
         if (track == null) continue; // its source failed to resolve above — skip rather than add a dangling reference

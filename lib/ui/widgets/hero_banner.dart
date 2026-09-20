@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'glass_surface.dart';
 
 class HeroBanner extends StatelessWidget {
   final String eyebrow;
@@ -23,69 +24,93 @@ class HeroBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
-    return Container(
-      height: 190,
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141216),
-        borderRadius: BorderRadius.circular(PetalTheme.radiusHero),
-      ),
-      child: Stack(
-        children: [
-          if (showBack)
-            Positioned(
-              top: 0,
-              left: 0,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: onBack,
-              ),
-            ),
-          Align(
-            alignment: Alignment.bottomLeft,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: SizedBox(
+        height: 190,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(PetalTheme.radiusHero),
+          padding: const EdgeInsets.all(24),
+          tint: petal.colors.surface.withOpacity(0.78),
+          child: SizedBox.expand(
+            child: Stack(
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                if (showBack)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: IconButton(
+                      icon: Icon(Icons.arrow_back, color: petal.colors.ink),
+                      onPressed: onBack,
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        eyebrow.toUpperCase(),
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white70, letterSpacing: 0.4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              eyebrow.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: petal.colors.accent,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                                color: petal.colors.ink,
+                                letterSpacing: -0.8,
+                                height: 1.05,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: petal.colors.ink2,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5, height: 1.05),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(subtitle, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                      if (onPlay != null)
+                        Material(
+                          color: petal.colors.accent,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: onPlay,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Icon(
+                                Icons.play_arrow,
+                                color: petal.colors.accentInk,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                if (onPlay != null)
-                  Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: onPlay,
-                      child: const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: Icon(Icons.play_arrow, color: Color(0xFF101012), size: 24),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
