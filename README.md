@@ -34,7 +34,7 @@ original author and link back to this repo. Full terms are in
 If you redistribute Petal or a modified version of it, include a credit
 along these lines wherever you'd normally credit sources/dependencies:
 
-> Based on [Petal](https://github.com/axl-afk/petal) by Samiul Islam,
+> Based on [Petal](https://github.com/axl-afk/petal) by AXL,
 > licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
 
 ## Please read this first — how this project was built
