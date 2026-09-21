@@ -12,7 +12,6 @@ import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import '../../utils/ui_scale.dart';
 import '../widgets/track_art.dart';
-import '../widgets/waveform_seekbar.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
@@ -64,11 +63,11 @@ class MiniPlayer extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(track.title,
+                      Text(track.displayTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: petal.text.miniTitle),
-                      Text(track.artist,
+                      Text(track.displayArtist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: petal.text.miniArtist),
@@ -108,13 +107,24 @@ class MiniPlayer extends ConsumerWidget {
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: _MiniTimeline(
-                    trackId: track.id,
-                    fallbackDuration: track.duration,
-                    controller: controller,
-                    compact: compact,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: _MiniTimeline(
+                        fallbackDuration: track.duration,
+                        controller: controller,
+                        compact: compact,
+                      ),
+                    ),
                   ),
                 ),
+                if (!compact) ...[
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 180,
+                    child: _MiniVolume(controller: controller),
+                  ),
+                ],
                 if (!compact)
                   IconButton(
                     tooltip: 'Full screen',
@@ -132,13 +142,11 @@ class MiniPlayer extends ConsumerWidget {
 }
 
 class _MiniTimeline extends StatelessWidget {
-  final String trackId;
   final Duration fallbackDuration;
   final PlaybackController controller;
   final bool compact;
 
   const _MiniTimeline({
-    required this.trackId,
     required this.fallbackDuration,
     required this.controller,
     required this.compact,
@@ -155,19 +163,26 @@ class _MiniTimeline extends StatelessWidget {
           final position = positionSnapshot.data ?? Duration.zero;
           final duration = durationSnapshot.data ?? fallbackDuration;
           final totalMs = math.max(1, duration.inMilliseconds);
-          final progress =
-              (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+          final progress = (position.inMilliseconds / totalMs)
+              .clamp(0.0, 1.0)
+              .toDouble();
           return Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              WaveformSeekBar(
-                seed: trackId,
-                progress: progress,
-                height: compact ? 26 : 30,
-                filledColor: petal.colors.accent,
-                unfilledColor: petal.colors.ink3.withOpacity(.35),
-                onSeekFraction: (fraction) => controller.seek(
-                  Duration(milliseconds: (totalMs * fraction).round()),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: compact ? 3 : 4,
+                  activeTrackColor: petal.colors.accent,
+                  inactiveTrackColor: petal.colors.ink3.withOpacity(.28),
+                  thumbColor: petal.colors.accent,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+                ),
+                child: Slider(
+                  value: progress,
+                  onChanged: (fraction) => controller.seek(
+                    Duration(milliseconds: (totalMs * fraction).round()),
+                  ),
                 ),
               ),
               Row(
@@ -181,6 +196,53 @@ class _MiniTimeline extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _MiniVolume extends StatelessWidget {
+  final PlaybackController controller;
+  const _MiniVolume({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return StreamBuilder<double>(
+      stream: controller.player.volumeStream,
+      initialData: controller.player.volume,
+      builder: (context, snapshot) {
+        final volume = snapshot.data ?? 1;
+        return Row(
+          children: [
+            IconButton(
+              tooltip: volume == 0 ? 'Unmute' : 'Mute',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 30, height: 38),
+              onPressed: () => controller.setVolume(volume == 0 ? 1 : 0),
+              icon: Icon(
+                volume == 0
+                    ? Icons.volume_off_rounded
+                    : volume < .5
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded,
+                size: 20,
+              ),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  activeTrackColor: petal.colors.accent,
+                  inactiveTrackColor: petal.colors.ink3.withOpacity(.28),
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4.5),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
+                ),
+                child: Slider(value: volume, onChanged: controller.setVolume),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

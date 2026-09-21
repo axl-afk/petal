@@ -77,6 +77,8 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
   Future<Track?> getById(String id) =>
       (select(tracks)..where((t) => t.id.equals(id))).getSingleOrNull();
 
+  Future<List<Track>> getAll() => select(tracks).get();
+
   Future<List<Track>> getForAccount(String accountEmail) =>
       (select(tracks)..where((t) => t.ownerAccount.equals(accountEmail))).get();
 

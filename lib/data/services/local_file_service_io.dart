@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../utils/id_gen.dart';
+import '../../utils/metadata_text.dart';
 import 'local_file_types.dart';
 
 /// Local-file import — desktop/mobile only. This file is only ever compiled
@@ -240,10 +241,18 @@ class LocalFileService {
       // native/FFI call. getImage:true is required to actually populate
       // `pictures` below; it defaults to false (skipped) otherwise.
       final tag = readMetadata(storedFile, getImage: true);
-      if ((tag.title ?? '').trim().isNotEmpty) title = tag.title!.trim();
-      if ((tag.artist ?? '').trim().isNotEmpty) artist = tag.artist!.trim();
-      if ((tag.album ?? '').trim().isNotEmpty) album = tag.album!.trim();
-      if (tag.genres.isNotEmpty) genre = tag.genres.join(', ');
+      if ((tag.title ?? '').trim().isNotEmpty) {
+        title = cleanMetadataText(tag.title!);
+      }
+      if ((tag.artist ?? '').trim().isNotEmpty) {
+        artist = cleanMetadataText(tag.artist!);
+      }
+      if ((tag.album ?? '').trim().isNotEmpty) {
+        album = cleanMetadataText(tag.album!);
+      }
+      if (tag.genres.isNotEmpty) {
+        genre = cleanMetadataText(tag.genres.join(', '));
+      }
       if (tag.duration != null) durationMs = tag.duration!.inMilliseconds;
 
       if (tag.pictures.isNotEmpty) {

@@ -132,34 +132,14 @@ class AppShell extends ConsumerWidget {
                             children: [
                               if (showRail) const SideRail(),
                               Expanded(
-                                // Cross-fades + a small upward slide between
-                                // sections (library <-> now playing <-> lyrics
-                                // <-> settings/add source) instead of an
-                                // instant swap — the same nav model
-                                // (currentSectionProvider, no Navigator routes)
-                                // just with a transition. Keyed on `section` so
-                                // AnimatedSwitcher treats each section as a
-                                // distinct child and actually animates between
-                                // them rather than rebuilding one in place.
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 220),
-                                  switchInCurve: Curves.easeOut,
-                                  switchOutCurve: Curves.easeIn,
-                                  transitionBuilder: (child, animation) =>
-                                      FadeTransition(
-                                        opacity: animation,
-                                        child: SlideTransition(
-                                          position: Tween<Offset>(
-                                            begin: const Offset(0, 0.02),
-                                            end: Offset.zero,
-                                          ).animate(animation),
-                                          child: child,
-                                        ),
-                                      ),
-                                  child: KeyedSubtree(
-                                    key: ValueKey(section),
-                                    child: _MainContent(section: section),
-                                  ),
+                                // Keep one opaque, constraint-stable content
+                                // subtree. The previous AnimatedSwitcher could
+                                // retain a zero-opacity outgoing child after a
+                                // desktop metric/fullscreen change, producing
+                                // the blank grey library seen in screenshots.
+                                child: ColoredBox(
+                                  color: context.petal.colors.ground,
+                                  child: _MainContent(section: section),
                                 ),
                               ),
                               if (showRightRail) const RightRail(),

@@ -131,7 +131,7 @@ class _PlayerHeader extends StatelessWidget {
               children: [
                 Text('NOW PLAYING', style: petal.text.meta.copyWith(letterSpacing: 1.4)),
                 Text(
-                  track.album.isEmpty ? 'Petal library' : track.album,
+                  track.displayAlbum.isEmpty ? 'Petal library' : track.displayAlbum,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: petal.text.miniTitle,
@@ -471,7 +471,7 @@ class _TrackDetails extends ConsumerWidget {
             crossAxisAlignment: centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
             children: [
               Text(
-                track.title,
+                track.displayTitle,
                 textAlign: centered ? TextAlign.center : TextAlign.start,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -479,15 +479,15 @@ class _TrackDetails extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                track.artist,
+                track.displayArtist,
                 textAlign: centered ? TextAlign.center : TextAlign.start,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: petal.text.heroSub.copyWith(fontSize: large ? 18 : 16),
               ),
-              if (track.album.isNotEmpty)
+              if (track.displayAlbum.isNotEmpty)
                 Text(
-                  track.album,
+                  track.displayAlbum,
                   textAlign: centered ? TextAlign.center : TextAlign.start,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -880,8 +880,8 @@ class _QueuePanel extends StatelessWidget {
             iconSize: 17,
             borderRadius: BorderRadius.circular(7),
           ),
-          title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(item.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(item.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(item.displayArtist, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: current
               ? Icon(Icons.graphic_eq_rounded, color: petal.colors.accent)
               : Text(formatDuration(item.duration), style: petal.text.meta),

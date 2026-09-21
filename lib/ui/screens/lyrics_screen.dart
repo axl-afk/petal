@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../data/db/app_database.dart';
+import '../../data/models/track_extensions.dart';
 import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
@@ -67,8 +68,8 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(track.title, style: petal.text.sectionTitle),
-                    Text(track.artist, style: petal.text.trackSubtitle),
+                    Text(track.displayTitle, style: petal.text.sectionTitle),
+                    Text(track.displayArtist, style: petal.text.trackSubtitle),
                   ],
                 ),
               ),
