@@ -57,38 +57,45 @@ class TrackTable extends ConsumerWidget {
     final downloads = ref.watch(downloadControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
 
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverToBoxAdapter(child: _TrackHeader(showDetails: MediaQuery.sizeOf(context).width >= 720)),
-        SliverList(
-      delegate: SliverChildBuilderDelegate((context, i) {
-        final track = tracks[i];
-        return _TrackRow(
-          key: ValueKey(track.id),
-          index: i + 1,
-          track: track,
-          isCurrent: playback.current?.id == track.id,
-          isPlaying: playback.isPlaying && playback.current?.id == track.id,
-          onPlay: () => controller.playSingle(track, context: tracks),
-          onToggleFavorite: () => ref
-              .read(libraryControllerProvider.notifier)
-              .toggleFavorite(track),
-          onOpenNowPlaying: () =>
-              ref.read(currentSectionProvider.notifier).state =
-                  AppSection.nowPlaying,
-          downloadState: downloads[track.id],
-          onDownload: () =>
-              ref.read(downloadControllerProvider.notifier).download(track),
-          onRemoveDownload: () =>
-              ref.read(downloadControllerProvider.notifier).remove(track),
-        );
-      }, childCount: tracks.length),
-        ),
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: const _TableRemainder(),
-        ),
-      ],
+    // One flat sliver is deliberately used here. The previous
+    // SliverMainAxisGroup -> SliverList -> SliverFillRemaining nesting could
+    // produce invalid remaining-paint geometry while a desktop window entered
+    // fullscreen, and release builds rendered the whole center pane blank.
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, rawIndex) {
+          if (rawIndex == 0) {
+            return _TrackHeader(
+              showDetails: MediaQuery.sizeOf(context).width >= 720,
+            );
+          }
+          final i = rawIndex - 1;
+          final track = tracks[i];
+          return _TrackRow(
+            key: ValueKey(track.id),
+            index: i + 1,
+            track: track,
+            isCurrent: playback.current?.id == track.id,
+            isPlaying:
+                playback.isPlaying && playback.current?.id == track.id,
+            onPlay: () => controller.playSingle(track, context: tracks),
+            onToggleFavorite: () => ref
+                .read(libraryControllerProvider.notifier)
+                .toggleFavorite(track),
+            onOpenNowPlaying: () =>
+                ref.read(currentSectionProvider.notifier).state =
+                    AppSection.nowPlaying,
+            downloadState: downloads[track.id],
+            onDownload: () => ref
+                .read(downloadControllerProvider.notifier)
+                .download(track),
+            onRemoveDownload: () => ref
+                .read(downloadControllerProvider.notifier)
+                .remove(track),
+          );
+        },
+        childCount: tracks.length + 1,
+      ),
     );
   }
 }
@@ -128,49 +135,6 @@ class _TrackHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-class _TableRemainder extends StatelessWidget {
-  const _TableRemainder();
-
-  @override
-  Widget build(BuildContext context) {
-    final petal = context.petal;
-    return CustomPaint(
-      painter: _TableStripePainter(
-        first: Colors.transparent,
-        second: petal.colors.surface.withOpacity(.24),
-        rowHeight: 52,
-      ),
-      child: const SizedBox.expand(),
-    );
-  }
-}
-
-class _TableStripePainter extends CustomPainter {
-  final Color first;
-  final Color second;
-  final double rowHeight;
-  const _TableStripePainter({
-    required this.first,
-    required this.second,
-    required this.rowHeight,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (double y = 0; y < size.height; y += rowHeight) {
-      final odd = (y ~/ rowHeight).isOdd;
-      canvas.drawRect(
-        Rect.fromLTWH(0, y, size.width, rowHeight),
-        Paint()..color = odd ? second : first,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _TableStripePainter oldDelegate) =>
-      oldDelegate.second != second || oldDelegate.rowHeight != rowHeight;
 }
 
 class _TrackRow extends StatefulWidget {
@@ -264,7 +228,7 @@ class _TrackRowState extends State<_TrackRow> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        track.title,
+                        track.displayTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: widget.isCurrent
@@ -272,7 +236,7 @@ class _TrackRowState extends State<_TrackRow> {
                             : petal.text.trackTitle,
                       ),
                       Text(
-                        track.artist,
+                        track.displayArtist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: petal.text.trackSubtitle,
@@ -284,7 +248,7 @@ class _TrackRowState extends State<_TrackRow> {
                   Expanded(
                     flex: 2,
                     child: Text(
-                      track.album,
+                      track.displayAlbum,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: petal.text.meta,

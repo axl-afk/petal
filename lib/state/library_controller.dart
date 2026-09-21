@@ -1,4 +1,4 @@
-import 'dart:async' show Timer;
+import 'dart:async' show Timer, unawaited;
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -20,6 +20,7 @@ import '../data/services/device_media_service.dart';
 import '../data/services/link_resolver_service.dart';
 import '../data/services/local_file_service.dart';
 import '../utils/id_gen.dart';
+import '../utils/metadata_text.dart';
 import 'auth_controller.dart';
 import 'cloud_sync_controller.dart';
 import 'playback_controller.dart';
@@ -144,7 +145,47 @@ class LibraryController extends StateNotifier<LibraryState> {
     this.driveFolder,
     this.cloudLibrary,
     this._ref,
-  ) : super(const LibraryState());
+  ) : super(const LibraryState()) {
+    if (!kIsWeb) unawaited(_repairCorruptedLocalMetadata());
+  }
+
+  /// Earlier builds could persist UTF-8 ID3 bytes as Latin-1/GBK mojibake.
+  /// Re-read only suspicious local rows from their original file (or Petal's
+  /// retained copy) and update them in place. Favorites and cached lyrics are
+  /// preserved by TrackDao.upsertAll.
+  Future<void> _repairCorruptedLocalMetadata() async {
+    final tracks = await trackDao.getAll();
+    final repaired = <TracksCompanion>[];
+    for (final track in tracks) {
+      if (track.sourceType != TrackSourceType.local) continue;
+      if (!looksLikeCorruptedMetadata(track.title) &&
+          !looksLikeCorruptedMetadata(track.artist) &&
+          !looksLikeCorruptedMetadata(track.album)) {
+        continue;
+      }
+      try {
+        final imported = await localFiles.importFile(track.originUri);
+        repaired.add(
+          TracksCompanion.insert(
+            id: track.id,
+            title: imported.title,
+            artist: Value(imported.artist),
+            album: Value(imported.album),
+            genre: Value(imported.genre),
+            durationMs: Value(imported.durationMs),
+            sourceType: TrackSourceType.local,
+            sourceUri: imported.storedPath,
+            originUri: track.originUri,
+            artworkUrl: Value(imported.artworkPath ?? track.artworkUrl),
+          ),
+        );
+      } catch (_) {
+        // Preserve the existing row if both the original and retained copy
+        // are unavailable or malformed.
+      }
+    }
+    if (repaired.isNotEmpty) await trackDao.upsertAll(repaired);
+  }
 
   /// Kicks a debounced Google Drive backup (see cloud_sync_controller.dart)
   /// after any mutation that a signed-in Google account cares about
@@ -309,9 +350,9 @@ class LibraryController extends StateNotifier<LibraryState> {
         .map(
           (item) => TracksCompanion.insert(
             id: idForLocalPath(item.contentUri),
-            title: item.title,
-            artist: Value(item.artist),
-            album: Value(item.album),
+            title: cleanMetadataText(item.title),
+            artist: Value(cleanMetadataText(item.artist)),
+            album: Value(cleanMetadataText(item.album)),
             durationMs: Value(item.durationMs),
             sourceType: TrackSourceType.local,
             sourceUri: item.contentUri,
@@ -401,10 +442,12 @@ class LibraryController extends StateNotifier<LibraryState> {
           .map(
             (item) => TracksCompanion.insert(
               id: idForCloudSource(item.stableOrigin),
-              title: item.title.isEmpty ? 'Untitled Track' : item.title,
-              artist: Value(item.resolvedArtist),
-              album: Value(item.album ?? ''),
-              genre: Value(item.genre ?? ''),
+              title: item.title.isEmpty
+                  ? 'Untitled Track'
+                  : cleanMetadataText(item.title),
+              artist: Value(cleanMetadataText(item.resolvedArtist)),
+              album: Value(cleanMetadataText(item.album ?? '')),
+              genre: Value(cleanMetadataText(item.genre ?? '')),
               durationMs: Value(item.durationMs ?? 0),
               sourceType: item.provider,
               sourceUri: item.streamUri,

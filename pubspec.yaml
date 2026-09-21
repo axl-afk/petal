@@ -50,6 +50,9 @@ dependencies:
   # bridge at all, so this entire class of platform-linking failure isn't
   # possible with it. See local_file_service_io.dart's importFile().
   audio_metadata_reader: ^1.7.1
+  # Explicit dependency (also used internally by audio_metadata_reader) for
+  # repairing legacy ID3 tags whose UTF-8 bytes were mislabeled as GBK.
+  charset: ^2.0.1
 
   # Auth
   google_sign_in: ^6.2.1

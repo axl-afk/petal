@@ -300,9 +300,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           headers: headers,
           tag: MediaItem(
             id: track.id,
-            title: track.title,
-            artist: track.artist,
-            album: track.album.isEmpty ? null : track.album,
+            title: track.displayTitle,
+            artist: track.displayArtist,
+            album: track.displayAlbum.isEmpty ? null : track.displayAlbum,
             duration: track.duration.inMilliseconds > 0
                 ? track.duration
                 : null,
@@ -316,7 +316,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     } catch (e) {
       state = state.copyWith(
         isPlaying: false,
-        error: 'Could not play "${track.title}": $e',
+        error: 'Could not play "${track.displayTitle}": $e',
       );
     }
     unawaited(_loadLyricsFor(track));
@@ -345,9 +345,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     }
 
     final result = await _lyricsService.fetch(
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
+      title: track.displayTitle,
+      artist: track.displayArtist,
+      album: track.displayAlbum,
       duration: track.duration,
     );
 
