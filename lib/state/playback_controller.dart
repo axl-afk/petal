@@ -362,6 +362,16 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     }
   }
 
+  /// Re-runs the embedded/online lyrics pipeline for the current track. This
+  /// is intentionally public so a failed network lookup is recoverable from
+  /// the player without skipping away and coming back.
+  Future<void> reloadLyrics() async {
+    final track = state.current;
+    if (track == null) return;
+    state = state.copyWith(clearLyrics: true);
+    await _loadLyricsFor(track);
+  }
+
   @override
   void dispose() {
     player.dispose();

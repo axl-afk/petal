@@ -38,7 +38,33 @@ extension PetalThemeContext on BuildContext {
 
 ThemeData buildPetalThemeData(AppColors c, Brightness brightness) {
   final textStyles = AppTextStyles(c);
-  final base = brightness == Brightness.dark ? ThemeData.dark() : ThemeData.light();
+  const fallbackFonts = <String>[
+    'Petal Arabic',
+    'Petal Bengali',
+    'Petal Devanagari',
+    'Petal Thai',
+    'Petal Hebrew',
+    'Petal Tamil',
+    'Petal Telugu',
+    'Petal Malayalam',
+    'Petal Gujarati',
+    'Petal Gurmukhi',
+    'Petal Kannada',
+    // Native CJK families cover the five target OSes without adding a 19 MB
+    // font collection to every Petal installer.
+    'Noto Sans CJK SC',
+    'Noto Sans CJK JP',
+    'PingFang SC',
+    'Microsoft YaHei',
+    'Yu Gothic',
+    'Malgun Gothic',
+    'Petal Symbols',
+  ];
+  final base = ThemeData(
+    brightness: brightness,
+    fontFamily: 'Petal Sans',
+    fontFamilyFallback: fallbackFonts,
+  );
 
   return base.copyWith(
     brightness: brightness,
@@ -60,6 +86,8 @@ ThemeData buildPetalThemeData(AppColors c, Brightness brightness) {
     textTheme: base.textTheme.apply(
       bodyColor: c.ink,
       displayColor: c.ink,
+      fontFamily: 'Petal Sans',
+      fontFamilyFallback: fallbackFonts,
     ),
     iconTheme: IconThemeData(color: c.ink2, size: 20),
     extensions: [PetalTheme(colors: c, text: textStyles)],

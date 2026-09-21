@@ -108,11 +108,18 @@ class AppShell extends ConsumerWidget {
                     data: MediaQuery.of(context)
                         .copyWith(textScaler: TextScaler.linear(scale)),
                     child: immersive
-                        ? AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 260),
-                            child: KeyedSubtree(
-                              key: ValueKey(section),
-                              child: _MainContent(section: section),
+                        // Fullscreen window changes can report several
+                        // intermediate sizes. Swapping two full-screen trees
+                        // during those frames used to leave only the outgoing
+                        // (transparent) AnimatedSwitcher child visible. Keep
+                        // one stable, opaque repaint boundary instead.
+                        ? ColoredBox(
+                            color: context.petal.colors.ground,
+                            child: RepaintBoundary(
+                              child: KeyedSubtree(
+                                key: ValueKey(section),
+                                child: _MainContent(section: section),
+                              ),
                             ),
                           )
                         : Column(

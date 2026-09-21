@@ -20,13 +20,41 @@ class LyricsService {
     String? album,
     Duration? duration,
   }) async {
+    final cleanTitle = _cleanTitle(title);
+    final cleanArtist = _cleanArtist(artist);
+
     // 1. Try the exact-match endpoint first — fastest and most accurate when
     // it hits.
     final exact = await _tryGetExact(title: title, artist: artist, album: album, duration: duration);
     if (exact != null) return exact;
 
-    // 2. Fall back to search and take the closest-duration result.
-    return _trySearch(title: title, artist: artist, duration: duration);
+    // Filename-like tags and common suffixes ("feat.", remaster/year,
+    // quality labels) are frequent on local libraries. Try normalized tags
+    // before search so an otherwise exact LRCLIB entry still resolves.
+    if (cleanTitle != title || cleanArtist != artist) {
+      final normalized = await _tryGetExact(
+        title: cleanTitle,
+        artist: cleanArtist,
+        album: album,
+        duration: duration,
+      );
+      if (normalized != null) return normalized;
+    }
+
+    // 2. Fall back to search and score title, artist, and duration together.
+    final result = await _trySearch(
+      title: cleanTitle,
+      artist: cleanArtist,
+      duration: duration,
+    );
+    if (result.found) return result;
+
+    // Some tags put every artist after the first into the artist string.
+    final primaryArtist = cleanArtist.split(RegExp(r'\s*(?:,|&| x | feat\.? )\s*', caseSensitive: false)).first;
+    if (primaryArtist != cleanArtist && primaryArtist.isNotEmpty) {
+      return _trySearch(title: cleanTitle, artist: primaryArtist, duration: duration);
+    }
+    return result;
   }
 
   Future<LyricsResult?> _tryGetExact({
@@ -44,7 +72,7 @@ class LyricsService {
     final uri = Uri.parse('$_base/get').replace(queryParameters: params);
 
     try {
-      final res = await _client.get(uri).timeout(const Duration(seconds: 8));
+      final res = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return null;
       final json = jsonDecode(res.body) as Map<String, dynamic>;
       return _resultFromJson(json);
@@ -64,23 +92,32 @@ class LyricsService {
     });
 
     try {
-      final res = await _client.get(uri).timeout(const Duration(seconds: 8));
+      final res = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return const LyricsResult.notFound();
       final list = jsonDecode(res.body) as List<dynamic>;
       if (list.isEmpty) return const LyricsResult.notFound();
 
       Map<String, dynamic> best = list.first as Map<String, dynamic>;
-      if (duration != null) {
-        var bestDiff = 1 << 30;
-        for (final item in list) {
-          final map = item as Map<String, dynamic>;
-          final d = (map['duration'] as num?)?.toInt();
-          if (d == null) continue;
-          final diff = (d - duration.inSeconds).abs();
-          if (diff < bestDiff) {
-            bestDiff = diff;
-            best = map;
-          }
+      var bestScore = -1 << 30;
+      for (final item in list) {
+        final map = item as Map<String, dynamic>;
+        final candidateTitle = _normalized(map['trackName'] as String? ?? '');
+        final candidateArtist = _normalized(map['artistName'] as String? ?? '');
+        var score = 0;
+        if (candidateTitle == _normalized(title)) score += 120;
+        if (candidateArtist == _normalized(artist)) score += 80;
+        if (candidateTitle.contains(_normalized(title))) score += 30;
+        if (candidateArtist.contains(_normalized(artist))) score += 20;
+        final d = (map['duration'] as num?)?.toInt();
+        if (duration != null && d != null) {
+          score -= (d - duration.inSeconds).abs().clamp(0, 90).toInt();
+        }
+        if (map['syncedLyrics'] is String && (map['syncedLyrics'] as String).trim().isNotEmpty) {
+          score += 12;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = map;
         }
       }
       return _resultFromJson(best);
@@ -88,6 +125,26 @@ class LyricsService {
       return const LyricsResult.notFound();
     }
   }
+
+  static const _headers = <String, String>{
+    'Accept': 'application/json',
+    'User-Agent': 'Petal/1.0 (cross-platform music player)',
+  };
+
+  static String _cleanTitle(String value) => value
+      .replaceAll(RegExp(r'\.[a-z0-9]{2,5}$', caseSensitive: false), '')
+      .replaceAll(RegExp(r'\s*[\[(](?:feat\.?|ft\.?|remaster(?:ed)?|official|audio|video|lyrics?).*?[\])]', caseSensitive: false), '')
+      .replaceAll(RegExp(r'\s+-\s+(?:remaster(?:ed)?|official|audio|video|lyrics?).*$', caseSensitive: false), '')
+      .trim();
+
+  static String _cleanArtist(String value) => value
+      .replaceAll(RegExp(r'\s*[\[(](?:feat\.?|ft\.?).*?[\])]', caseSensitive: false), '')
+      .trim();
+
+  static String _normalized(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[\s\-_.:,;!?/\\|(){}\[\]]+', unicode: true), ' ')
+      .trim();
 
   LyricsResult _resultFromJson(Map<String, dynamic> json) {
     final synced = json['syncedLyrics'] as String?;
