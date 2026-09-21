@@ -102,6 +102,49 @@ flutter:
   assets:
     - assets/
     - assets/icon/
+  # Petal must render title/artist tags without a web-font request. These
+  # bundled Noto faces cover the app locales plus the major Indic, Arabic,
+  # Hebrew, Thai and symbol blocks; the theme adds native CJK fallbacks too.
+  fonts:
+    - family: Petal Sans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
+    - family: Petal Arabic
+      fonts:
+        - asset: assets/fonts/NotoSansArabic-Regular.ttf
+    - family: Petal Bengali
+      fonts:
+        - asset: assets/fonts/NotoSansBengali-Regular.ttf
+    - family: Petal Devanagari
+      fonts:
+        - asset: assets/fonts/NotoSansDevanagari-Regular.ttf
+    - family: Petal Thai
+      fonts:
+        - asset: assets/fonts/NotoSansThai-Regular.ttf
+    - family: Petal Hebrew
+      fonts:
+        - asset: assets/fonts/NotoSansHebrew-Regular.ttf
+    - family: Petal Tamil
+      fonts:
+        - asset: assets/fonts/NotoSansTamil-Regular.ttf
+    - family: Petal Telugu
+      fonts:
+        - asset: assets/fonts/NotoSansTelugu-Regular.ttf
+    - family: Petal Malayalam
+      fonts:
+        - asset: assets/fonts/NotoSansMalayalam-Regular.ttf
+    - family: Petal Gujarati
+      fonts:
+        - asset: assets/fonts/NotoSansGujarati-Regular.ttf
+    - family: Petal Gurmukhi
+      fonts:
+        - asset: assets/fonts/NotoSansGurmukhi-Regular.ttf
+    - family: Petal Kannada
+      fonts:
+        - asset: assets/fonts/NotoSansKannada-Regular.ttf
+    - family: Petal Symbols
+      fonts:
+        - asset: assets/fonts/NotoSansSymbols2-Regular.ttf
 
 # Generates real per-platform app icons (Android adaptive icon, iOS, macOS,
 # Windows, web favicon/manifest icons) from assets/icon/ — run

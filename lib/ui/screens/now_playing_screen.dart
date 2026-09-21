@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -15,6 +16,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import '../../utils/lyric_sync.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/animated_glass_backdrop.dart';
 import '../widgets/equalizer_sheet.dart';
 import '../widgets/group_playback_sheet.dart';
 import '../widgets/swipe_down_to_dismiss.dart';
@@ -54,34 +56,43 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       );
     }
 
-    return SwipeDownToDismiss(
-      onDismiss: _close,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 940;
-          return Column(
-            children: [
-              _PlayerHeader(track: track, onClose: _close),
-              Expanded(
-                child: wide
-                    ? _DesktopPlayer(
-                        track: track,
-                        playback: playback,
-                        controller: controller,
-                        panel: _panel,
-                        onPanelChanged: _setPanel,
-                      )
-                    : _CompactPlayer(
-                        track: track,
-                        playback: playback,
-                        controller: controller,
-                        panel: _panel,
-                        onPanelChanged: _setPanel,
-                      ),
-              ),
-            ],
-          );
-        },
+    return ColoredBox(
+      color: petal.colors.ground,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const AnimatedGlassBackdrop(),
+          SwipeDownToDismiss(
+            onDismiss: _close,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 980;
+                return Column(
+                  children: [
+                    _PlayerHeader(track: track, onClose: _close),
+                    Expanded(
+                      child: wide
+                          ? _DesktopPlayer(
+                              track: track,
+                              playback: playback,
+                              controller: controller,
+                              panel: _panel,
+                              onPanelChanged: _setPanel,
+                            )
+                          : _CompactPlayer(
+                              track: track,
+                              playback: playback,
+                              controller: controller,
+                              panel: _panel,
+                              onPanelChanged: _setPanel,
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -100,52 +111,62 @@ class _PlayerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
+    final width = MediaQuery.sizeOf(context).width;
+    final roomy = width >= 620;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 18, 6),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(24),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        tint: petal.colors.surface.withOpacity(.58),
+        child: Row(
         children: [
           IconButton(
             tooltip: 'Close player',
             onPressed: onClose,
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 34),
           ),
-          const Spacer(),
-          Column(
-            children: [
-              Text('NOW PLAYING', style: petal.text.meta.copyWith(letterSpacing: 1.4)),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 260),
-                child: Text(
+          Expanded(
+            child: Column(
+              children: [
+                Text('NOW PLAYING', style: petal.text.meta.copyWith(letterSpacing: 1.4)),
+                Text(
                   track.album.isEmpty ? 'Petal library' : track.album,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: petal.text.miniTitle,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const Spacer(),
-          IconButton(
-            tooltip: 'Listen Together',
-            onPressed: () => GroupPlaybackSheet.show(context),
-            icon: const Icon(Icons.speaker_group_outlined),
-          ),
-          IconButton(
-            tooltip: 'Equalizer',
-            onPressed: () => EqualizerSheet.show(context),
-            icon: const Icon(Icons.tune_rounded),
-          ),
+          if (roomy)
+            IconButton(
+              tooltip: 'Listen Together',
+              onPressed: () => GroupPlaybackSheet.show(context),
+              iconSize: 25,
+              icon: const Icon(Icons.speaker_group_outlined),
+            ),
+          if (roomy)
+            IconButton(
+              tooltip: 'Equalizer',
+              onPressed: () => EqualizerSheet.show(context),
+              iconSize: 25,
+              icon: const Icon(Icons.tune_rounded),
+            ),
           IconButton(
             tooltip: 'Full screen',
             onPressed: WindowService.toggleFullscreen,
+            iconSize: 28,
             icon: const Icon(Icons.fullscreen_rounded),
           ),
           IconButton(
             tooltip: 'More options',
             onPressed: () {},
+            iconSize: 26,
             icon: const Icon(Icons.more_horiz_rounded),
           ),
         ],
+        ),
       ),
     );
   }
@@ -168,47 +189,164 @@ class _DesktopPlayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final petal = context.petal;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(30, 14, 30, 30),
+      padding: const EdgeInsets.fromLTRB(28, 18, 28, 28),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            flex: 5,
-            child: Center(
-              child: _SwipeableArtwork(
-                track: track,
-                controller: controller,
-                size: math.min(440.0, MediaQuery.sizeOf(context).height * .58).toDouble(),
+            flex: 6,
+            child: _SpringReveal(
+              child: GlassSurface(
+                borderRadius: BorderRadius.circular(30),
+                padding: const EdgeInsets.fromLTRB(30, 24, 22, 18),
+                tint: petal.colors.surface.withOpacity(.62),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lyrics_rounded, color: petal.colors.accent, size: 28),
+                        const SizedBox(width: 10),
+                        Text(
+                          panel == _PlayerPanel.lyrics ? 'Lyrics' : 'Up next',
+                          style: petal.text.sectionTitle.copyWith(fontSize: 22),
+                        ),
+                        const Spacer(),
+                        _PanelSelector(selected: panel, onChanged: onPanelChanged, compact: true),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 280),
+                        switchInCurve: Curves.easeOutBack,
+                        child: panel == _PlayerPanel.lyrics
+                            ? _InlineLyrics(
+                                key: const ValueKey('desktop-lyrics'),
+                                track: track,
+                                playback: playback,
+                                controller: controller,
+                                spacious: true,
+                              )
+                            : _QueuePanel(
+                                key: const ValueKey('desktop-queue'),
+                                playback: playback,
+                                controller: controller,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 40),
+          const SizedBox(width: 24),
           Expanded(
-            flex: 6,
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _TrackDetails(track: track),
-                  const SizedBox(height: 22),
-                  _Transport(playback: playback, controller: controller),
-                  const SizedBox(height: 22),
-                  _PanelSelector(selected: panel, onChanged: onPanelChanged),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 310,
-                    child: _PlayerPanelBody(
-                      panel: panel,
-                      track: track,
-                      playback: playback,
-                      controller: controller,
-                    ),
-                  ),
-                ],
+            flex: 5,
+            child: _SpringReveal(
+              delay: const Duration(milliseconds: 70),
+              child: GlassSurface(
+                borderRadius: BorderRadius.circular(30),
+                padding: const EdgeInsets.fromLTRB(30, 22, 30, 24),
+                tint: petal.colors.surface.withOpacity(.66),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final artSize = math.min(
+                      math.min(constraints.maxWidth * .76, constraints.maxHeight * .50),
+                      470.0,
+                    ).clamp(250.0, 470.0).toDouble();
+                    return SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          Align(
+                            alignment: Alignment.topCenter,
+                            child: _SwipeableArtwork(
+                              track: track,
+                              controller: controller,
+                              size: artSize,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 520),
+                            child: Column(
+                              children: [
+                                _TrackDetails(track: track, centered: true, large: true),
+                                const SizedBox(height: 12),
+                                _Transport(
+                                  playback: playback,
+                                  controller: controller,
+                                  maxWidth: 500,
+                                  large: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SpringReveal extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+  const _SpringReveal({required this.child, this.delay = Duration.zero});
+
+  @override
+  State<_SpringReveal> createState() => _SpringRevealState();
+}
+
+class _SpringRevealState extends State<_SpringReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController.unbounded(vsync: this);
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(widget.delay, () {
+      if (!mounted) return;
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _controller.value = 1;
+      } else {
+        _controller.animateWith(
+          SpringSimulation(const SpringDescription(mass: 1, stiffness: 230, damping: 24), 0, 1, 0),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final value = _controller.value.clamp(0.0, 1.0).toDouble();
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 22),
+            child: Transform.scale(scale: .97 + value * .03, child: child),
+          ),
+        );
+      },
     );
   }
 }
@@ -237,13 +375,25 @@ class _CompactPlayer extends StatelessWidget {
           math.min(constraints.maxWidth - 56, constraints.maxHeight * .46),
         ).toDouble();
         return ListView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 36),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
           children: [
-            Center(child: _SwipeableArtwork(track: track, controller: controller, size: artSize)),
-            const SizedBox(height: 24),
-            _TrackDetails(track: track),
+            _SpringReveal(
+              child: Center(
+                child: _SwipeableArtwork(track: track, controller: controller, size: artSize),
+              ),
+            ),
             const SizedBox(height: 20),
-            _Transport(playback: playback, controller: controller),
+            GlassSurface(
+              borderRadius: BorderRadius.circular(26),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+              child: Column(
+                children: [
+                  _TrackDetails(track: track),
+                  const SizedBox(height: 12),
+                  _Transport(playback: playback, controller: controller),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
             _PanelSelector(selected: panel, onChanged: onPanelChanged),
             const SizedBox(height: 12),
@@ -278,11 +428,13 @@ class _SwipeableArtwork extends StatelessWidget {
         if (velocity < -250) controller.next();
         if (velocity > 250) controller.previous();
       },
-      child: Hero(
-        tag: 'playing-art-${track.id}',
-        child: DecoratedBox(
+      // AppShell switches sections in place rather than pushing Navigator
+      // routes, so a Hero has no valid route flight here. Keeping one around
+      // caused the artwork subtree to detach during desktop fullscreen metric
+      // changes, leaving a blank player until another rebuild.
+      child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(.28),
@@ -295,42 +447,52 @@ class _SwipeableArtwork extends StatelessWidget {
             track: track,
             size: size,
             iconSize: size * .24,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(28),
           ),
         ),
-      ),
     );
   }
 }
 
 class _TrackDetails extends ConsumerWidget {
   final Track track;
-  const _TrackDetails({required this.track});
+  final bool centered;
+  final bool large;
+  const _TrackDetails({required this.track, this.centered = false, this.large = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final petal = context.petal;
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
             children: [
               Text(
                 track.title,
+                textAlign: centered ? TextAlign.center : TextAlign.start,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: petal.text.heroTitle.copyWith(fontSize: 25),
+                style: petal.text.heroTitle.copyWith(fontSize: large ? 30 : 25),
               ),
               const SizedBox(height: 4),
               Text(
                 track.artist,
+                textAlign: centered ? TextAlign.center : TextAlign.start,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: petal.text.heroSub.copyWith(fontSize: 16),
+                style: petal.text.heroSub.copyWith(fontSize: large ? 18 : 16),
               ),
               if (track.album.isNotEmpty)
-                Text(track.album, maxLines: 1, overflow: TextOverflow.ellipsis, style: petal.text.meta),
+                Text(
+                  track.album,
+                  textAlign: centered ? TextAlign.center : TextAlign.start,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: petal.text.meta.copyWith(fontSize: large ? 14 : null),
+                ),
             ],
           ),
         ),
@@ -348,14 +510,23 @@ class _TrackDetails extends ConsumerWidget {
 class _Transport extends StatelessWidget {
   final PlaybackState playback;
   final PlaybackController controller;
-  const _Transport({required this.playback, required this.controller});
+  final double maxWidth;
+  final bool large;
+  const _Transport({
+    required this.playback,
+    required this.controller,
+    this.maxWidth = 460,
+    this.large = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
     final track = playback.current!;
-    return Column(
-      children: [
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Column(
+        children: [
         StreamBuilder<Duration?>(
           stream: controller.player.durationStream,
           builder: (context, durationSnapshot) => StreamBuilder<Duration>(
@@ -370,8 +541,8 @@ class _Transport extends StatelessWidget {
                 children: [
                   SliderTheme(
                     data: SliderTheme.of(context).copyWith(
-                      trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
                       overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
                     ),
                     child: Slider(
@@ -405,9 +576,17 @@ class _Transport extends StatelessWidget {
               color: playback.shuffleEnabled ? petal.colors.accent : petal.colors.ink2,
               icon: const Icon(Icons.shuffle_rounded),
             ),
-            IconButton(onPressed: controller.previous, iconSize: 35, icon: const Icon(Icons.skip_previous_rounded)),
-            _PlayButton(playback: playback, controller: controller),
-            IconButton(onPressed: controller.next, iconSize: 35, icon: const Icon(Icons.skip_next_rounded)),
+            IconButton(
+              onPressed: controller.previous,
+              iconSize: large ? 42 : 35,
+              icon: const Icon(Icons.skip_previous_rounded),
+            ),
+            _PlayButton(playback: playback, controller: controller, large: large),
+            IconButton(
+              onPressed: controller.next,
+              iconSize: large ? 42 : 35,
+              icon: const Icon(Icons.skip_next_rounded),
+            ),
             IconButton(
               tooltip: _loopLabel(playback.loopMode),
               onPressed: controller.cycleLoopMode,
@@ -422,16 +601,31 @@ class _Transport extends StatelessWidget {
           initialData: controller.player.volume,
           builder: (context, snapshot) {
             final volume = snapshot.data ?? 1;
-            return Row(
-              children: [
-                Icon(volume == 0 ? Icons.volume_off_rounded : Icons.volume_down_rounded, size: 18, color: petal.colors.ink3),
-                Expanded(child: Slider(value: volume, onChanged: controller.setVolume)),
-                Icon(Icons.volume_up_rounded, size: 18, color: petal.colors.ink3),
-              ],
+            return Center(
+              child: SizedBox(
+                width: math.min(maxWidth * .62, 280.0).toDouble(),
+                child: Row(
+                  children: [
+                    Icon(
+                      volume == 0 ? Icons.volume_off_rounded : Icons.volume_down_rounded,
+                      size: 18,
+                      color: petal.colors.ink3,
+                    ),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(trackHeight: 2),
+                        child: Slider(value: volume, onChanged: controller.setVolume),
+                      ),
+                    ),
+                    Icon(Icons.volume_up_rounded, size: 18, color: petal.colors.ink3),
+                  ],
+                ),
+              ),
             );
           },
         ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -445,7 +639,8 @@ class _Transport extends StatelessWidget {
 class _PlayButton extends StatelessWidget {
   final PlaybackState playback;
   final PlaybackController controller;
-  const _PlayButton({required this.playback, required this.controller});
+  final bool large;
+  const _PlayButton({required this.playback, required this.controller, this.large = false});
 
   @override
   Widget build(BuildContext context) {
@@ -457,8 +652,8 @@ class _PlayButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: playback.isBuffering ? null : controller.togglePlayPause,
         child: SizedBox(
-          width: 64,
-          height: 64,
+          width: large ? 74 : 64,
+          height: large ? 74 : 64,
           child: playback.isBuffering
               ? Padding(
                   padding: const EdgeInsets.all(20),
@@ -466,7 +661,7 @@ class _PlayButton extends StatelessWidget {
                 )
               : Icon(
                   playback.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 38,
+                  size: large ? 45 : 38,
                   color: petal.colors.accentInk,
                 ),
         ),
@@ -478,15 +673,21 @@ class _PlayButton extends StatelessWidget {
 class _PanelSelector extends StatelessWidget {
   final _PlayerPanel selected;
   final ValueChanged<_PlayerPanel> onChanged;
-  const _PanelSelector({required this.selected, required this.onChanged});
+  final bool compact;
+  const _PanelSelector({required this.selected, required this.onChanged, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     return SegmentedButton<_PlayerPanel>(
-      segments: const [
-        ButtonSegment(value: _PlayerPanel.lyrics, icon: Icon(Icons.lyrics_outlined), label: Text('Lyrics')),
-        ButtonSegment(value: _PlayerPanel.queue, icon: Icon(Icons.queue_music_rounded), label: Text('Up next')),
-      ],
+      segments: compact
+          ? const [
+              ButtonSegment(value: _PlayerPanel.lyrics, icon: Icon(Icons.lyrics_outlined)),
+              ButtonSegment(value: _PlayerPanel.queue, icon: Icon(Icons.queue_music_rounded)),
+            ]
+          : const [
+              ButtonSegment(value: _PlayerPanel.lyrics, icon: Icon(Icons.lyrics_outlined), label: Text('Lyrics')),
+              ButtonSegment(value: _PlayerPanel.queue, icon: Icon(Icons.queue_music_rounded), label: Text('Up next')),
+            ],
       selected: {selected},
       onSelectionChanged: (value) => onChanged(value.first),
       showSelectedIcon: false,
@@ -534,7 +735,14 @@ class _InlineLyrics extends StatefulWidget {
   final Track track;
   final PlaybackState playback;
   final PlaybackController controller;
-  const _InlineLyrics({super.key, required this.track, required this.playback, required this.controller});
+  final bool spacious;
+  const _InlineLyrics({
+    super.key,
+    required this.track,
+    required this.playback,
+    required this.controller,
+    this.spacious = false,
+  });
 
   @override
   State<_InlineLyrics> createState() => _InlineLyricsState();
@@ -544,16 +752,26 @@ class _InlineLyricsState extends State<_InlineLyrics> {
   final _scrollController = ItemScrollController();
   int _lastActive = -1;
 
+  @override
+  void didUpdateWidget(covariant _InlineLyrics oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track.id != widget.track.id) _lastActive = -1;
+  }
+
   void _keepActiveVisible(int active) {
-    if (active < 0 || active == _lastActive || !_scrollController.isAttached) {
+    if (active < 0 || active == _lastActive) return;
+    if (!_scrollController.isAttached) {
+      Future<void>.delayed(const Duration(milliseconds: 80), () {
+        if (mounted) _keepActiveVisible(active);
+      });
       return;
     }
     _lastActive = active;
     _scrollController.scrollTo(
       index: active,
-      alignment: .32,
-      duration: const Duration(milliseconds: 380),
-      curve: Curves.easeOutCubic,
+      alignment: widget.spacious ? .40 : .30,
+      duration: const Duration(milliseconds: 520),
+      curve: Curves.easeOutQuart,
     );
   }
 
@@ -563,12 +781,34 @@ class _InlineLyricsState extends State<_InlineLyrics> {
     final lyrics = widget.playback.lyrics;
     if (lyrics == null) return const Center(child: CircularProgressIndicator());
     if (!lyrics.found) {
-      return Center(child: Text('Lyrics are not available for this track.', style: petal.text.meta));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_download_outlined, size: 34, color: petal.colors.ink3),
+            const SizedBox(height: 10),
+            Text('No embedded or online lyrics found.', style: petal.text.meta),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: widget.controller.reloadLyrics,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Search online again'),
+            ),
+          ],
+        ),
+      );
     }
     if (!lyrics.isSynced) {
       return SingleChildScrollView(
         padding: const EdgeInsets.all(22),
-        child: Text(lyrics.plainText ?? '', style: petal.text.lyricLine.copyWith(color: petal.colors.ink)),
+        child: Text(
+          lyrics.plainText ?? '',
+          style: petal.text.lyricLine.copyWith(
+            color: petal.colors.ink,
+            fontSize: widget.spacious ? 27 : null,
+            height: widget.spacious ? 1.65 : null,
+          ),
+        ),
       );
     }
     return StreamBuilder<Duration>(
@@ -591,8 +831,17 @@ class _InlineLyricsState extends State<_InlineLyrics> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 180),
-                  style: selected ? petal.text.lyricLineActive : petal.text.lyricLine,
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  style: selected
+                      ? petal.text.lyricLineActive.copyWith(
+                          fontSize: widget.spacious ? 38 : null,
+                          height: widget.spacious ? 1.35 : null,
+                        )
+                      : petal.text.lyricLine.copyWith(
+                          fontSize: widget.spacious ? 29 : null,
+                          height: widget.spacious ? 1.55 : null,
+                        ),
                   child: Text(line.text),
                 ),
               ),
