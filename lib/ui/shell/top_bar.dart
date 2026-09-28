@@ -41,8 +41,8 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     );
 
     final search = SizedBox(
-      width: isMobile ? double.infinity : 240,
-      height: 36,
+      width: isMobile ? double.infinity : 320,
+      height: 42,
       child: TextField(
         onChanged: (q) {
           ref.read(currentSectionProvider.notifier).state = AppSection.library;
@@ -55,10 +55,10 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
           hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13.5),
           prefixIcon: Icon(Icons.search, size: 18, color: petal.colors.ink3),
           filled: true,
-          fillColor: petal.colors.surface2,
+          fillColor: petal.colors.surface2.withOpacity(.85),
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(24),
             borderSide: BorderSide.none,
           ),
         ),
