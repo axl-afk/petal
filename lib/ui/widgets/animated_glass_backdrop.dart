@@ -8,7 +8,8 @@ import '../../theme/app_theme.dart';
 /// blur repaint would scale its work with refresh rate (up to 160 frames/s).
 /// The painter settles after the entrance and respects reduced motion.
 class AnimatedGlassBackdrop extends StatefulWidget {
-  const AnimatedGlassBackdrop({super.key});
+  final Color? accent;
+  const AnimatedGlassBackdrop({super.key, this.accent});
 
   @override
   State<AnimatedGlassBackdrop> createState() => _AnimatedGlassBackdropState();
@@ -48,7 +49,7 @@ class _AnimatedGlassBackdropState extends State<AnimatedGlassBackdrop>
           builder: (context, _) => CustomPaint(
             painter: _DropletPainter(
               phase: _controller.value * math.pi * 2,
-              accent: colors.accent,
+              accent: widget.accent ?? colors.accent,
               surface: colors.surface2,
               dark: Theme.of(context).brightness == Brightness.dark,
             ),
@@ -106,7 +107,7 @@ class _DropletPainter extends CustomPainter {
 
     for (final drop in drops) {
       final paint = Paint()
-        ..color = drop.color.withOpacity(dark ? .12 : .10)
+        ..color = drop.color.withOpacity(dark ? .25 : .16)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, shortest * .06);
       canvas.drawCircle(drop.center, drop.radius, paint);
       canvas.drawCircle(

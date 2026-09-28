@@ -11,6 +11,7 @@ import '../../data/db/daos/track_dao.dart';
 import '../../data/db/app_database.dart';
 import '../../data/models/track_extensions.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/collection_layout.dart';
 import '../widgets/grid_card.dart';
 import '../widgets/track_art.dart';
 import '../widgets/track_table.dart';
@@ -172,6 +173,7 @@ class LibraryOverview extends ConsumerWidget {
                   icon: Icons.album_outlined,
                   title: album.album,
                   subtitle: album.artist,
+                  artworkUrl: album.artworkUrl,
                   onTap: () {
                     ref
                         .read(libraryControllerProvider.notifier)
@@ -367,15 +369,23 @@ class _OverviewShelf extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            height: 186,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: count,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) =>
-                  SizedBox(width: 158, child: itemBuilder(index)),
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = CollectionLayout.shelfWidth(
+                constraints.maxWidth,
+              );
+              return SizedBox(
+                height: cardWidth + MediaQuery.textScalerOf(context).scale(48),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: count,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(width: CollectionLayout.spacing),
+                  itemBuilder: (context, index) =>
+                      SizedBox(width: cardWidth, child: itemBuilder(index)),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -423,18 +433,18 @@ class _SearchBrowse extends ConsumerWidget {
                   sliver: SliverLayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.crossAxisExtent;
-                      final columns = width < 520
-                          ? 2
-                          : width < 900
-                          ? 3
-                          : 4;
+                      final columns = CollectionLayout.columns(width);
+                      final cardWidth = CollectionLayout.cardWidth(width);
                       return SliverGrid.builder(
                         itemCount: items.length,
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: columns,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.15,
+                          crossAxisSpacing: CollectionLayout.spacing,
+                          mainAxisSpacing: CollectionLayout.spacing,
+                          childAspectRatio:
+                              cardWidth /
+                              (cardWidth +
+                                  MediaQuery.textScalerOf(context).scale(48)),
                         ),
                         itemBuilder: (context, index) {
                           final genre = items[index];
@@ -696,6 +706,7 @@ class _AlbumsGrid extends ConsumerWidget {
             title: album.album,
             subtitle:
                 '${album.artist} · ${album.trackCount} song${album.trackCount == 1 ? '' : 's'}',
+            artworkUrl: album.artworkUrl,
             onTap: () => ref
                 .read(libraryControllerProvider.notifier)
                 .filterByAlbum(album.album),
@@ -754,19 +765,19 @@ class _Grid extends StatelessWidget {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth < 520
-            ? 2
-            : constraints.maxWidth < 900
-            ? 3
-            : 4;
+        final available = constraints.maxWidth - 40;
+        final columns = CollectionLayout.columns(available);
+        final cardWidth = CollectionLayout.cardWidth(available);
         return Padding(
           padding: const EdgeInsets.all(20),
           child: GridView.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: columns == 2 ? 1.0 : 1.1,
+              crossAxisSpacing: CollectionLayout.spacing,
+              mainAxisSpacing: CollectionLayout.spacing,
+              childAspectRatio:
+                  cardWidth /
+                  (cardWidth + MediaQuery.textScalerOf(context).scale(48)),
             ),
             itemCount: itemCount,
             itemBuilder: itemBuilder,

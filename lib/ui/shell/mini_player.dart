@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import '../../utils/ui_scale.dart';
 import '../widgets/track_art.dart';
+import '../widgets/glass_surface.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
@@ -29,110 +30,129 @@ class MiniPlayer extends ConsumerWidget {
     final compact = width < 720;
     final veryNarrow = width < 430;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 10 : 22, 0, compact ? 10 : 22, 10),
-      child: Material(
-        color: petal.colors.surface.withOpacity(.94),
-        elevation: 12,
-        shadowColor: Colors.black.withOpacity(.22),
-        borderRadius: BorderRadius.circular(24),
-        clipBehavior: Clip.antiAlias,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => ref.read(currentSectionProvider.notifier).state =
-              AppSection.nowPlaying,
-          onVerticalDragEnd: (details) {
-            if ((details.primaryVelocity ?? 0) < -250) {
-              ref.read(currentSectionProvider.notifier).state =
-                  AppSection.nowPlaying;
-            }
-          },
-          child: SizedBox(
-            height: (compact ? 72 : 76) * scale,
-            child: Row(
-              children: [
-                const SizedBox(width: 12),
-                TrackArt(track: track, size: 46 * scale, iconSize: 19),
-                const SizedBox(width: 12),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: veryNarrow ? 84 : 120,
-                    maxWidth: compact ? 180 : 230,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
+    return Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 1120 * scale),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 10 : 22,
+            0,
+            compact ? 10 : 22,
+            10,
+          ),
+          child: GlassSurface(
+            borderRadius: BorderRadius.circular(24),
+            child: Material(
+              color: Colors.transparent,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => ref.read(currentSectionProvider.notifier).state =
+                    AppSection.nowPlaying,
+                onVerticalDragEnd: (details) {
+                  if ((details.primaryVelocity ?? 0) < -250) {
+                    ref.read(currentSectionProvider.notifier).state =
+                        AppSection.nowPlaying;
+                  }
+                },
+                child: SizedBox(
+                  height: (compact ? 72 : 76) * scale,
+                  child: Row(
                     children: [
-                      Text(track.displayTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: petal.text.miniTitle),
-                      Text(track.displayArtist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: petal.text.miniArtist),
+                      const SizedBox(width: 12),
+                      TrackArt(track: track, size: 46 * scale, iconSize: 19),
+                      const SizedBox(width: 12),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: veryNarrow ? 84 : 120,
+                          maxWidth: compact ? 180 : 230,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              track.displayTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: petal.text.miniTitle,
+                            ),
+                            Text(
+                              track.displayArtist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: petal.text.miniArtist,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!compact) ...[
+                        IconButton(
+                          tooltip: track.isFavorite
+                              ? 'Remove from favorites'
+                              : 'Add to favorites',
+                          icon: Icon(
+                            track.isFavorite
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                          ),
+                          color: track.isFavorite
+                              ? petal.colors.accent
+                              : petal.colors.ink2,
+                          onPressed: () => ref
+                              .read(libraryControllerProvider.notifier)
+                              .toggleFavorite(track),
+                        ),
+                        IconButton(
+                          tooltip: 'Previous',
+                          icon: const Icon(
+                            Icons.skip_previous_rounded,
+                            size: 24,
+                          ),
+                          onPressed: controller.previous,
+                        ),
+                      ],
+                      _MiniPlayPause(
+                        playing: playback.isPlaying,
+                        buffering: playback.isBuffering,
+                        onTap: controller.togglePlayPause,
+                      ),
+                      IconButton(
+                        tooltip: 'Next',
+                        icon: const Icon(Icons.skip_next_rounded, size: 24),
+                        onPressed: controller.next,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: _MiniTimeline(
+                              fallbackDuration: track.duration,
+                              controller: controller,
+                              compact: compact,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!compact) ...[
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 180,
+                          child: _MiniVolume(controller: controller),
+                        ),
+                      ],
+                      if (!compact)
+                        IconButton(
+                          tooltip: 'Full screen',
+                          onPressed: WindowService.toggleFullscreen,
+                          icon: const Icon(Icons.fullscreen_rounded),
+                        ),
+                      const SizedBox(width: 10),
                     ],
                   ),
                 ),
-                if (!compact) ...[
-                  IconButton(
-                    tooltip: track.isFavorite
-                        ? 'Remove from favorites'
-                        : 'Add to favorites',
-                    icon: Icon(track.isFavorite
-                        ? Icons.favorite
-                        : Icons.favorite_border),
-                    color: track.isFavorite
-                        ? petal.colors.accent
-                        : petal.colors.ink2,
-                    onPressed: () => ref
-                        .read(libraryControllerProvider.notifier)
-                        .toggleFavorite(track),
-                  ),
-                  IconButton(
-                    tooltip: 'Previous',
-                    icon: const Icon(Icons.skip_previous_rounded, size: 24),
-                    onPressed: controller.previous,
-                  ),
-                ],
-                _MiniPlayPause(
-                  playing: playback.isPlaying,
-                  buffering: playback.isBuffering,
-                  onTap: controller.togglePlayPause,
-                ),
-                IconButton(
-                  tooltip: 'Next',
-                  icon: const Icon(Icons.skip_next_rounded, size: 24),
-                  onPressed: controller.next,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: _MiniTimeline(
-                        fallbackDuration: track.duration,
-                        controller: controller,
-                        compact: compact,
-                      ),
-                    ),
-                  ),
-                ),
-                if (!compact) ...[
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 180,
-                    child: _MiniVolume(controller: controller),
-                  ),
-                ],
-                if (!compact)
-                  IconButton(
-                    tooltip: 'Full screen',
-                    onPressed: WindowService.toggleFullscreen,
-                    icon: const Icon(Icons.fullscreen_rounded),
-                  ),
-                const SizedBox(width: 10),
-              ],
+              ),
             ),
           ),
         ),
@@ -175,8 +195,12 @@ class _MiniTimeline extends StatelessWidget {
                   activeTrackColor: petal.colors.accent,
                   inactiveTrackColor: petal.colors.ink3.withOpacity(.28),
                   thumbColor: petal.colors.accent,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 5,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 13,
+                  ),
                 ),
                 child: Slider(
                   value: progress,
@@ -234,8 +258,12 @@ class _MiniVolume extends StatelessWidget {
                   trackHeight: 3,
                   activeTrackColor: petal.colors.accent,
                   inactiveTrackColor: petal.colors.ink3.withOpacity(.28),
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4.5),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 4.5,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 11,
+                  ),
                 ),
                 child: Slider(value: volume, onChanged: controller.setVolume),
               ),

@@ -167,7 +167,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       LoopMode.all => LoopMode.one,
       LoopMode.one => LoopMode.off,
     };
-    await player.setLoopMode(next == LoopMode.one ? LoopMode.one : LoopMode.off);
+    await player.setLoopMode(
+      next == LoopMode.one ? LoopMode.one : LoopMode.off,
+    );
     state = state.copyWith(loopMode: next);
   }
 
@@ -190,16 +192,19 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     final parameters = await equalizerParameters();
     if (parameters == null || normalizedGains.isEmpty) return;
     for (var i = 0; i < parameters.bands.length; i++) {
-      final normalized = normalizedGains[
-        (i * normalizedGains.length ~/ parameters.bands.length)
-            .clamp(0, normalizedGains.length - 1)
-      ].clamp(-1.0, 1.0).toDouble();
+      final normalized =
+          normalizedGains[(i *
+                      normalizedGains.length ~/
+                      parameters.bands.length)
+                  .clamp(0, normalizedGains.length - 1)]
+              .clamp(-1.0, 1.0)
+              .toDouble();
       final gain = normalized >= 0
           ? normalized * parameters.maxDecibels
           : -normalized.abs() * parameters.minDecibels.abs();
-      await parameters.bands[i].setGain(gain
-          .clamp(parameters.minDecibels, parameters.maxDecibels)
-          .toDouble());
+      await parameters.bands[i].setGain(
+        gain.clamp(parameters.minDecibels, parameters.maxDecibels).toDouble(),
+      );
     }
   }
 
@@ -210,8 +215,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       return;
     }
     if (state.shuffleEnabled && state.queue.length > 1) {
-      var nextIndex = (DateTime.now().microsecondsSinceEpoch % state.queue.length).toInt();
-      if (nextIndex == state.index) nextIndex = (nextIndex + 1) % state.queue.length;
+      var nextIndex =
+          (DateTime.now().microsecondsSinceEpoch % state.queue.length).toInt();
+      if (nextIndex == state.index)
+        nextIndex = (nextIndex + 1) % state.queue.length;
       await playAt(nextIndex);
       return;
     }
@@ -254,9 +261,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   void reflectFavorite(String trackId, bool isFavorite) {
     final current = state.current;
     final updatedQueue = state.queue
-        .map((track) => track.id == trackId
-            ? track.copyWith(isFavorite: isFavorite)
-            : track)
+        .map(
+          (track) => track.id == trackId
+              ? track.copyWith(isFavorite: isFavorite)
+              : track,
+        )
         .toList(growable: false);
     state = state.copyWith(
       current: current?.id == trackId
@@ -269,6 +278,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   Future<void> _loadCurrentAndPlay() async {
     final track = state.current;
     if (track == null) return;
+    // The play() future can remain pending until playback completes. Start
+    // lyrics as soon as the track is selected, including the first song.
+    unawaited(_loadLyricsFor(track));
     try {
       Uri source;
       Map<String, String>? headers;
@@ -303,15 +315,24 @@ class PlaybackController extends StateNotifier<PlaybackState> {
             title: track.displayTitle,
             artist: track.displayArtist,
             album: track.displayAlbum.isEmpty ? null : track.displayAlbum,
-            duration: track.duration.inMilliseconds > 0
-                ? track.duration
-                : null,
+            duration: track.duration.inMilliseconds > 0 ? track.duration : null,
             artUri: _artworkUri(track.artworkUrl),
             playable: true,
           ),
         ),
       );
-      await player.play();
+      unawaited(
+        player.play().then(
+          (_) {},
+          onError: (Object error) {
+            if (!mounted || state.current?.id != track.id) return;
+            state = state.copyWith(
+              isPlaying: false,
+              error: 'Could not play "${track.displayTitle}": $error',
+            );
+          },
+        ),
+      );
       state = state.copyWith(clearError: true);
     } catch (e) {
       state = state.copyWith(
@@ -319,7 +340,6 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         error: 'Could not play "${track.displayTitle}": $e',
       );
     }
-    unawaited(_loadLyricsFor(track));
   }
 
   Uri? _artworkUri(String? raw) {
@@ -332,13 +352,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   Future<void> _loadLyricsFor(Track track) async {
     if (track.lyricsLrc != null && track.lyricsLrc!.trim().isNotEmpty) {
       final lines = LyricsService.parseLrc(track.lyricsLrc!);
-      if (state.current?.id == track.id) {
+      if (mounted && state.current?.id == track.id) {
         state = state.copyWith(lyrics: LyricsResult.synced(lines));
       }
       return;
     }
     if (track.lyricsPlain != null && track.lyricsPlain!.trim().isNotEmpty) {
-      if (state.current?.id == track.id) {
+      if (mounted && state.current?.id == track.id) {
         state = state.copyWith(lyrics: LyricsResult.plain(track.lyricsPlain));
       }
       return;
@@ -351,7 +371,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       duration: track.duration,
     );
 
-    if (state.current?.id != track.id)
+    if (!mounted || state.current?.id != track.id)
       return; // user moved on before this resolved
     state = state.copyWith(lyrics: result);
 

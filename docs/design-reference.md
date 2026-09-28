@@ -27,6 +27,16 @@ The video includes Apple Music editorial picks, commercial catalog search, radio
 
 The imagery and artist names in the reference are examples. Petal displays artwork and metadata from the user's own library rather than copying those assets.
 
+## Glass and responsive pass
+
+The controls in the screenshots have translucent dark bases, a soft white edge, a directional highlight and background blur. Petal now applies those layers to the search field, compact transport and player mode controls. Blur stays clipped to each control; the backdrop settles after its entrance so playback position updates do not animate the whole viewport. Album artwork uses the indexed cover art when present instead of a generic gradient tile.
+
+Collection widths are derived from the actual pane rather than a fixed number of desktop columns. Phone, tablet and desktop grids allow progressively larger square covers, and the horizontal Home shelves grow with the viewport. The full player artwork can expand beyond its previous 470 logical pixel cap on large monitors.
+
+Apple's [materials](https://developer.apple.com/design/human-interface-guidelines/materials), [layout](https://developer.apple.com/design/human-interface-guidelines/layout) and [button](https://developer.apple.com/design/human-interface-guidelines/buttons) guidance informed the bounded translucent controls and the separation of controls from content. Flutter renders an approximation of the reference material across all six supported targets, so device screenshots remain the visual acceptance check.
+
+The first-track lyric lookup now starts when the track is selected. It no longer waits for `just_audio`'s `play()` future, which may stay pending until playback finishes.
+
 ## Spotify concept reference
 
 The supplied Spotify redesign recording adds ideas around fast library filters, an always accessible mini player, focused album/artist pages, and lyrics next to playback on desktop. Petal keeps its Apple-inspired visual system and maps those ideas to its existing favorites, songs, artists, albums, genres, playlists, and current queue. The video also depicts recommendations, friends, podcasts and a streaming catalog; those require content or social services that Petal does not currently have.
