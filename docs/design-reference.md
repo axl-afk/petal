@@ -10,6 +10,7 @@ The supplied 21-minute Apple Music redesign recording and nine screenshots are v
 | Compact transport floats above the browsing surface | Rounded mini player with independent progress and controls. |
 | Phone player changes among cover art, lyrics, and upcoming tracks | Three player views with a persistent transport and shared playback state. |
 | Desktop player presents artwork and synchronized lyrics together | Artwork and transport on the left; lyrics or queue on the right. |
+| Desktop browsing gives artwork and collections a wide content area | Library content uses the available width; queue is opened from the player instead of occupying a permanent right rail. |
 | Search is clearly separated from browsing | Top search field continues to query Petal's indexed local and cloud tracks. |
 | Library surfaces favorites, playlists, artists, albums, and songs | Existing tabs and sidebar preserve those distinct destinations. |
 
