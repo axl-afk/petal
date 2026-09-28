@@ -224,59 +224,83 @@ certainly why.
 
 ### Sign-in setup (Google & Microsoft)
 
-Sign-in is real OAuth code, but it can't function until *you* register the
-app and paste in your own client ID — no working credential could be
-supplied on your behalf; this isn't something that can be worked around,
-since Google/Microsoft only issue a client ID to whoever registers the app
-under their own developer account, tied to your specific bundle ID/package
-name/redirect URI. Full instructions are in
-`lib/data/services/auth/auth_config.dart` at the top of the file. Until you
-do this, the sign-in buttons in Settings will show a clear "not configured"
-message rather than pretending to work. Desktop (Windows/Linux) support in
-`flutter_web_auth_2` specifically is worth double-checking against that
-package's current docs before relying on it there — it's strongest on
-iOS/Android/macOS/web.
+Create the OAuth registrations in accounts you control. Client IDs are public
+configuration passed with `--dart-define`; **never put a client secret in a
+mobile or browser build**. Petal requests Drive/OneDrive access for cloud
+library features as well as basic profile information. Until you register
+the providers, their Settings sign-in buttons cannot complete authentication.
 
-**Fastest path to a real, testable sign-in — Google, web build:**
-1. https://console.cloud.google.com/ → create/select a project.
-2. APIs & Services → OAuth consent screen → External → fill in the app
-   name/email → under Scopes, add `.../auth/userinfo.email`,
-   `.../auth/userinfo.profile`, `https://www.googleapis.com/auth/drive.appdata`,
-   and `https://www.googleapis.com/auth/drive.readonly` → under Test users,
-   add your own Google account (keeps you off the "unverified app" block
-   while testing). The last scope is a meaningfully bigger permission grant
-   than the other three — see "Google Drive folder import" below for why
-   it's needed and what it actually lets Petal see.
-3. APIs & Services → Library → search "Google Drive API" → Enable (needed
-   for the library backup feature to work at all).
-4. APIs & Services → Credentials → Create Credentials → OAuth client ID →
-   type **Web application** → add an Authorized JavaScript origin matching
-   wherever you serve the build from (e.g. `http://localhost:8000` for the
-   `python3 -m http.server 8000` local-test setup in "Web build setup"
-   below) → Create.
-5. Paste the resulting `....apps.googleusercontent.com` client ID into
-   `googleWebClientId` in `auth_config.dart`.
-6. If sign-in silently does nothing on web specifically (a known
-   version-dependent quirk in `google_sign_in_web`), add
-   `<meta name="google-signin-client_id" content="YOUR_CLIENT_ID">` inside
-   `<head>` in the `web/index.html` that `flutter create .` generates —
-   this wasn't verified against a real browser in this environment, so
-   it's a "try this if it doesn't just work" note, not a guaranteed step.
+**Google Cloud Console** (`https://console.cloud.google.com/`):
 
-Android/iOS/macOS need their own platform-specific registration (SHA-1
-fingerprint, bundle ID, `GoogleService-Info.plist`) when you get to
-building those — see the numbered checklist in `auth_config.dart` for the
-full picture, including Microsoft's Azure App registration steps.
+1. Select/create a project; configure the OAuth consent screen (Google Auth
+   Platform). Add your Google account as a test user while the app is in
+   testing. Configure `email`, `profile`, `drive.appdata` and
+   `drive.readonly` scopes. Drive readonly can see files across the user's
+   Drive; production use of these sensitive scopes may require verification.
+2. Enable the **Google Drive API** for that project.
+3. Create an OAuth client of type **Web application**. Add each web origin
+   (for example, `http://localhost:8000` and your deployed HTTPS origin) to
+   Authorized JavaScript origins. Pass that Web client ID as
+   `PETAL_GOOGLE_CLIENT_ID` on web **and Android**. Do not add `/auth.html`
+   to Google's JavaScript origins; an origin has no path.
+4. For Android, create a separate **Android** OAuth client with package name
+   `com.axl.petal` and the SHA-1 fingerprint of the signing key. For a local
+   debug build, get the fingerprint with
+   `keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android`.
+   Register the release key and Google Play App Signing fingerprint too if
+   applicable. The Android client is selected by package and fingerprint;
+   Petal passes the Web client ID in `serverClientId` for Drive scopes.
+5. For iOS and macOS, create **iOS** OAuth clients with each target's actual
+   bundle ID (the checked-in default is `com.axl.petal`). In the matching
+   `ios/Runner/Info.plist` and `macos/Runner/Info.plist`, add `GIDClientID`
+   with that platform's client ID, and append its **reversed client ID**
+   (from Google Cloud) as a new entry under `CFBundleURLTypes` →
+   `CFBundleURLSchemes`. Keep the existing `petalauth` URL scheme as well.
+   On macOS, signing needs the Google keychain access group already declared
+   in the Runner entitlements. Use your actual bundle IDs if changed.
 
-Note that sign-in's job in this app is narrower than it might sound: it
-doesn't pull a file listing from Drive/OneDrive's API (that would need a
-lot more plumbing). It authenticates your identity, and Petal uses that
-identity to remember which Drive/OneDrive *links you've pasted* — so
-signing in on a new device/reinstall re-resolves and reconnects those same
-links automatically, matching "set up your drive links once, don't do it
-again." Google sign-in specifically requests two extra scopes beyond
-identity: the narrow `drive.appdata` (see the next section) and the
-broader `drive.readonly` (see "Google Drive folder import" below).
+`google_sign_in` in this project supports Android, iOS, macOS and web.
+Google login on Windows/Linux still needs a separate desktop OAuth
+implementation; adding a client ID alone will not enable it there.
+
+**Microsoft Entra admin center** (`https://entra.microsoft.com/`):
+
+1. App registrations → New registration. Choose supported account types;
+   for OneDrive personal backup, include **personal Microsoft accounts**.
+   Copy the **Application (client) ID** into
+   `PETAL_MICROSOFT_CLIENT_ID`. The default authority is `common`; override
+   it with `PETAL_MICROSOFT_TENANT` if you use a tenant-specific app.
+2. Authentication → Add a platform → **Mobile and desktop applications**:
+   register `petalauth://auth` (or the exact value supplied through
+   `PETAL_MICROSOFT_REDIRECT_URI`) for native apps. The Android manifest and
+   Apple Info.plists already handle the default `petalauth` scheme. A custom
+   scheme also requires changing those platform files.
+3. Add another platform → **Single-page application**: register each exact
+   web callback URL, such as `http://localhost:8000/auth.html` and
+   `https://your-domain.example/auth.html`. If hosted under a path, include
+   that path. Petal derives the web redirect from its origin/path and uses
+   `web/auth.html` to complete the popup; do not register this as a **Web**
+   platform redirect. No client secret is used.
+4. In API permissions, add delegated Microsoft Graph permissions `Files.Read`
+   and `Files.ReadWrite.AppFolder` as needed. The latter is available for
+   **personal Microsoft accounts only**, so work/school OneDrive needs a
+   different backup permission and implementation. Petal also asks for
+   `openid`, `profile`, `email` and `offline_access` during sign-in.
+
+Run a local web test on a fixed port matching the console registrations:
+
+```bash
+flutter run -d chrome --web-port 8000 \
+  --dart-define=PETAL_GOOGLE_CLIENT_ID=YOUR_WEB_CLIENT_ID.apps.googleusercontent.com \
+  --dart-define=PETAL_MICROSOFT_CLIENT_ID=YOUR_ENTRA_APPLICATION_ID
+```
+
+For Android/iOS/macOS, use the same build defines; web automatically uses
+the registered `/auth.html` callback, while native builds use
+`petalauth://auth`. Production builds need the same defines and their own
+registered origins/signing fingerprints. On Windows/Linux, Microsoft
+authentication also depends on the platform webview/browser callback
+support from `flutter_web_auth_2`; verify it on your target OS.
 
 ## Google Drive folder import
 

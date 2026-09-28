@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 
@@ -28,6 +29,15 @@ class MicrosoftAuthService implements AuthProviderService {
   static String get _tokenEndpoint =>
       'https://login.microsoftonline.com/${AuthConfig.microsoftTenant}/oauth2/v2.0/token';
 
+  // The web plugin completes sign-in through a same-origin callback page.
+  // Native apps use the registered custom URL scheme instead.
+  String get _redirectUri => kIsWeb
+      ? Uri.base
+            .resolve('auth.html')
+            .replace(query: null, fragment: null)
+            .toString()
+      : AuthConfig.microsoftRedirectUri;
+
   String _randomVerifier() {
     final rand = Random.secure();
     final bytes = List<int>.generate(64, (_) => rand.nextInt(256));
@@ -51,12 +61,13 @@ class MicrosoftAuthService implements AuthProviderService {
     final verifier = _randomVerifier();
     final challenge = _challengeFor(verifier);
     final state = _randomVerifier();
+    final redirectUri = _redirectUri;
 
     final authUrl = Uri.parse(_authorizeEndpoint).replace(
       queryParameters: {
         'client_id': AuthConfig.microsoftClientId,
         'response_type': 'code',
-        'redirect_uri': AuthConfig.microsoftRedirectUri,
+        'redirect_uri': redirectUri,
         'response_mode': 'query',
         'scope': AuthConfig.microsoftScopes.join(' '),
         'code_challenge': challenge,
@@ -65,7 +76,7 @@ class MicrosoftAuthService implements AuthProviderService {
       },
     );
 
-    final callbackScheme = Uri.parse(AuthConfig.microsoftRedirectUri).scheme;
+    final callbackScheme = Uri.parse(redirectUri).scheme;
 
     final resultUrl = await FlutterWebAuth2.authenticate(
       url: authUrl.toString(),
@@ -93,7 +104,7 @@ class MicrosoftAuthService implements AuthProviderService {
         'client_id': AuthConfig.microsoftClientId,
         'grant_type': 'authorization_code',
         'code': code,
-        'redirect_uri': AuthConfig.microsoftRedirectUri,
+        'redirect_uri': redirectUri,
         'code_verifier': verifier,
         'scope': AuthConfig.microsoftScopes.join(' '),
       },
