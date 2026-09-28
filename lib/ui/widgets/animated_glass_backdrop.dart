@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// Slow, low-contrast liquid shapes that give the glass panes something to
-/// refract. The painter is ignored when the platform requests reduced motion.
+/// A brief ambient entrance for the glass panes. A perpetual full-screen
+/// blur repaint would scale its work with refresh rate (up to 160 frames/s).
+/// The painter settles after the entrance and respects reduced motion.
 class AnimatedGlassBackdrop extends StatefulWidget {
   const AnimatedGlassBackdrop({super.key});
 
@@ -17,7 +18,7 @@ class _AnimatedGlassBackdropState extends State<AnimatedGlassBackdrop>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 18),
+    duration: const Duration(milliseconds: 1200),
   );
 
   @override
@@ -26,8 +27,8 @@ class _AnimatedGlassBackdropState extends State<AnimatedGlassBackdrop>
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.stop();
       _controller.value = .18;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat();
+    } else if (_controller.status == AnimationStatus.dismissed) {
+      _controller.forward();
     }
   }
 
