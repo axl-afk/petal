@@ -26,3 +26,11 @@ The video includes Apple Music editorial picks, commercial catalog search, radio
 - Resizing and fullscreen: avoid route Hero detachment and transparent outgoing panes.
 
 The imagery and artist names in the reference are examples. Petal displays artwork and metadata from the user's own library rather than copying those assets.
+
+## Spotify concept reference
+
+The supplied Spotify redesign recording adds ideas around fast library filters, an always accessible mini player, focused album/artist pages, and lyrics next to playback on desktop. Petal keeps its Apple-inspired visual system and maps those ideas to its existing favorites, songs, artists, albums, genres, playlists, and current queue. The video also depicts recommendations, friends, podcasts and a streaming catalog; those require content or social services that Petal does not currently have.
+
+Text metadata stays Unicode end to end. The importer reads embedded tags where supported and uses a filename fallback for malformed tags; the display repair handles common wrongly decoded UTF-8 across Indic, Arabic, Cyrillic, Greek, CJK, and other scripts. Packaged fonts cover the listed common scripts, with operating-system font fallback for others. Unknown encodings, malformed tags, or absent system glyphs can still require a manual metadata correction; "every language" cannot be guaranteed by a fixed decoder.
+
+Flutter's vsync drives transitions at the device refresh rate rather than a hard-coded 60 fps timer. Touch drag updates are isolated from the player subtree, and the large blurred backdrop finishes its entrance instead of repainting perpetually at 120/144/160 Hz. Real frame timing still needs profiling on representative devices.
