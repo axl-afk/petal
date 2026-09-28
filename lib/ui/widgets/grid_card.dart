@@ -15,6 +15,10 @@ class GridCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
+    // Give each collection a stable color without relying on editorial art.
+    // Actual playlist artwork always takes priority when available.
+    final hue = (title.runes.fold<int>(0, (value, rune) => value * 31 + rune) % 360).toDouble();
+    final wash = HSVColor.fromAHSV(1, hue, .58, .68).toColor();
     return Material(
       color: petal.colors.surface,
       borderRadius: BorderRadius.circular(PetalTheme.radiusCard),
@@ -22,23 +26,31 @@ class GridCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(PetalTheme.radiusCard),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: imageBytes == null ? 44 : double.infinity,
-                height: imageBytes == null ? 44 : 96,
-                decoration: BoxDecoration(color: petal.colors.surface2, borderRadius: BorderRadius.circular(12)),
-                clipBehavior: Clip.antiAlias,
-                child: imageBytes == null
-                    ? Icon(icon, size: 20, color: petal.colors.ink2)
-                    : Image.memory(imageBytes!, fit: BoxFit.cover),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [wash, wash.withOpacity(.48)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: imageBytes == null
+                      ? Icon(icon, size: 44, color: Colors.white.withOpacity(.92))
+                      : Image.memory(imageBytes!, fit: BoxFit.cover),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(height: 10),
               Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: petal.text.cardTitle),
               const SizedBox(height: 2),
-              Text(subtitle, style: petal.text.cardSubtitle),
+              Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: petal.text.cardSubtitle),
             ],
           ),
         ),
