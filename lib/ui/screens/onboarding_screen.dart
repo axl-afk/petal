@@ -32,6 +32,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  int _step = 0;
   bool _requestingPermission = false;
   PermissionStatus? _permissionResult;
 
@@ -107,96 +108,130 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(
-                    'Welcome to Petal',
-                    style: petal.text.heroTitle.copyWith(fontSize: 26),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Sign in to bring your saved Drive/OneDrive links and playlists back on every '
-                    'device, or skip straight to playing music already on this device.',
-                    style: petal.text.heroSub,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 28),
-
-                  if (auth.error != null) ...[
-                    Text(
-                      auth.error!,
-                      style: TextStyle(
-                        color: Colors.redAccent.shade200,
-                        fontSize: 12.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: auth.loading
-                              ? null
-                              : () => _signIn(AuthProviderKind.google),
-                          icon: const Icon(Icons.g_mobiledata, size: 22),
-                          label: const Text('Sign in with Google'),
-                        ),
-                      ),
-                    ],
-                  ),
+                  Text('Petal', style: petal.text.heroTitle.copyWith(fontSize: 28), textAlign: TextAlign.center),
                   const SizedBox(height: 10),
+                  Semantics(
+                    label: 'Introduction step ${_step + 1} of 3',
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(3, (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        height: 6,
+                        width: index == _step ? 24 : 8,
+                        decoration: BoxDecoration(
+                          color: index == _step ? petal.colors.accent : petal.colors.ink3,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      )),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: KeyedSubtree(key: ValueKey(_step), child: _buildStep(context, auth)),
+                  ),
+                  const SizedBox(height: 22),
                   Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: auth.loading
-                              ? null
-                              : () => _signIn(AuthProviderKind.microsoft),
-                          icon: const Icon(Icons.window, size: 18),
-                          label: const Text('Sign in with Microsoft'),
+                      if (_step > 0)
+                        TextButton(onPressed: () => setState(() => _step--), child: const Text('Back')),
+                      const Spacer(),
+                      if (_step < 2)
+                        FilledButton(
+                          onPressed: () => setState(() => _step++),
+                          child: const Text('Next'),
                         ),
-                      ),
                     ],
-                  ),
-
-                  if (auth.loading) ...[
-                    const SizedBox(height: 14),
-                    const LinearProgressIndicator(),
-                  ],
-
-                  const SizedBox(height: 18),
-
-                  if (_isAndroid) ...[
-                    _PermissionCard(
-                      granted: _permissionResult?.isGranted ?? false,
-                      denied:
-                          _permissionResult != null &&
-                          !_permissionResult!.isGranted,
-                      busy: _requestingPermission,
-                      onRequest: _requestAudioAccess,
-                    ),
-                    const SizedBox(height: 18),
-                  ] else if (_isIOS) ...[
-                    Text(
-                      "On iOS, Petal uses the Files app's own picker to import music — that needs no extra "
-                      "permission from you, it just asks each time you choose a file.",
-                      style: petal.text.cardSubtitle,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-
-                  TextButton(
-                    onPressed: auth.loading ? null : _useLocalOnly,
-                    child: const Text('Just play music on this device'),
                   ),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStep(BuildContext context, AuthState auth) {
+    final petal = context.petal;
+    final heading = switch (_step) {
+      0 => 'Your music, in one place',
+      1 => 'Choose where music comes from',
+      _ => 'Make it yours',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(heading, style: petal.text.sectionTitle, textAlign: TextAlign.center),
+        const SizedBox(height: 14),
+        if (_step == 0) ...[
+          const _InfoLine(icon: Icons.library_music_outlined, text: 'Browse your songs, artists, albums, playlists and favorites.'),
+          const _InfoLine(icon: Icons.play_circle_outline, text: 'Play, seek, manage the queue and read lyrics when available.'),
+          const _InfoLine(icon: Icons.download_outlined, text: 'Save supported cloud tracks to listen offline.'),
+        ] else if (_step == 1) ...[
+          if (_isAndroid) ...[
+            const _InfoLine(icon: Icons.phone_android, text: 'Scan audio on this phone, or choose individual files.'),
+            _PermissionCard(
+              granted: _permissionResult?.isGranted ?? false,
+              denied: _permissionResult != null && !_permissionResult!.isGranted,
+              busy: _requestingPermission,
+              onRequest: _requestAudioAccess,
+            ),
+          ] else if (_isIOS)
+            const _InfoLine(icon: Icons.folder_open, text: 'Choose audio with the Files picker. iOS does not offer whole-device scanning.')
+          else if (kIsWeb)
+            const _InfoLine(icon: Icons.web, text: 'Connect cloud music. A browser cannot scan your device storage.')
+          else
+            const _InfoLine(icon: Icons.folder_open, text: 'Choose files or folders, or scan your Music folder and accessible drives.'),
+          const _InfoLine(icon: Icons.cloud_outlined, text: 'Connect Google Drive or OneDrive to find and play audio in your account.'),
+        ] else ...[
+          const _InfoLine(icon: Icons.person_outline, text: 'An account is optional. You can start with local music and connect cloud music later.'),
+          const _InfoLine(icon: Icons.security_outlined, text: 'Petal asks for access only when you choose a music source.'),
+          if (auth.error != null) ...[
+            const SizedBox(height: 8),
+            Text(auth.error!, style: TextStyle(color: Colors.redAccent.shade200), textAlign: TextAlign.center),
+          ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: auth.loading ? null : () => _signIn(AuthProviderKind.google),
+            icon: const Icon(Icons.g_mobiledata, size: 22),
+            label: const Text('Connect Google Drive'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: auth.loading ? null : () => _signIn(AuthProviderKind.microsoft),
+            icon: const Icon(Icons.window, size: 18),
+            label: const Text('Connect OneDrive'),
+          ),
+          if (auth.loading) const LinearProgressIndicator(),
+          TextButton(
+            onPressed: auth.loading ? null : _useLocalOnly,
+            child: Text(kIsWeb ? 'Explore Petal without connecting' : 'Continue without an account'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _InfoLine extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _InfoLine({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: petal.colors.accent, size: 22),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: petal.text.heroSub)),
+        ],
       ),
     );
   }
