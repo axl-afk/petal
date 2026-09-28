@@ -6,6 +6,7 @@ import '../../data/services/window/window_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_controller.dart';
 import '../../state/cloud_sync_controller.dart';
+import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
 import '../../utils/breakpoints.dart';
@@ -81,76 +82,88 @@ class AppShell extends ConsumerWidget {
               bindings: {
                 const SingleActivator(LogicalKeyboardKey.space): () {
                   if (!_editingText()) {
-                    ref.read(playbackControllerProvider.notifier).togglePlayPause();
+                    ref
+                        .read(playbackControllerProvider.notifier)
+                        .togglePlayPause();
                   }
                 },
-                const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true):
-                    () => ref.read(playbackControllerProvider.notifier).next(),
-                const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
-                    () => ref.read(playbackControllerProvider.notifier).previous(),
+                const SingleActivator(
+                  LogicalKeyboardKey.arrowRight,
+                  alt: true,
+                ): () =>
+                    ref.read(playbackControllerProvider.notifier).next(),
+                const SingleActivator(
+                  LogicalKeyboardKey.arrowLeft,
+                  alt: true,
+                ): () =>
+                    ref.read(playbackControllerProvider.notifier).previous(),
               },
               child: Focus(
                 autofocus: true,
                 child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final isMobile = Breakpoints.isMobile(width);
-                final immersive = section == AppSection.nowPlaying ||
-                    section == AppSection.lyrics;
-                final showRail = !isMobile;
-                final scale = UiScale.forWidth(width);
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final isMobile = Breakpoints.isMobile(width);
+                    final immersive =
+                        section == AppSection.nowPlaying ||
+                        section == AppSection.lyrics;
+                    final showRail = !isMobile;
+                    final scale = UiScale.forWidth(width);
 
-                return UiScale(
-                  value: scale,
-                  child: MediaQuery(
-                    data: MediaQuery.of(context)
-                        .copyWith(textScaler: TextScaler.linear(scale)),
-                    child: immersive
-                        // Fullscreen window changes can report several
-                        // intermediate sizes. Swapping two full-screen trees
-                        // during those frames used to leave only the outgoing
-                        // (transparent) AnimatedSwitcher child visible. Keep
-                        // one stable, opaque repaint boundary instead.
-                        ? ColoredBox(
-                            color: context.petal.colors.ground,
-                            child: RepaintBoundary(
-                              child: KeyedSubtree(
-                                key: ValueKey(section),
-                                child: _MainContent(section: section),
-                              ),
-                            ),
-                          )
-                        : Column(
-                      children: [
-                        TopBar(isMobile: isMobile),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (showRail) const SideRail(),
-                              Expanded(
-                                // Keep one opaque, constraint-stable content
-                                // subtree. The previous AnimatedSwitcher could
-                                // retain a zero-opacity outgoing child after a
-                                // desktop metric/fullscreen change, producing
-                                // the blank grey library seen in screenshots.
-                                child: ColoredBox(
-                                  color: context.petal.colors.ground,
-                                  child: _MainContent(section: section),
+                    return UiScale(
+                      value: scale,
+                      child: MediaQuery(
+                        data: MediaQuery.of(context)
+                            .copyWith(textScaler: TextScaler.linear(scale)),
+                        child: immersive
+                            // Fullscreen window changes can report several
+                            // intermediate sizes. Swapping two full-screen trees
+                            // during those frames used to leave only the outgoing
+                            // (transparent) AnimatedSwitcher child visible. Keep
+                            // one stable, opaque repaint boundary instead.
+                            ? ColoredBox(
+                                color: context.petal.colors.ground,
+                                child: RepaintBoundary(
+                                  child: KeyedSubtree(
+                                    key: ValueKey(section),
+                                    child: _MainContent(section: section),
+                                  ),
                                 ),
+                              )
+                            : Column(
+                                children: [
+                                  TopBar(isMobile: isMobile),
+                                  const Divider(height: 1),
+                                  Expanded(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (showRail) const SideRail(),
+                                        Expanded(
+                                          // Keep one opaque, constraint-stable content
+                                          // subtree. The previous AnimatedSwitcher could
+                                          // retain a zero-opacity outgoing child after a
+                                          // desktop metric/fullscreen change, producing
+                                          // the blank grey library seen in screenshots.
+                                          child: ColoredBox(
+                                            color: context.petal.colors.ground,
+                                            child: _MainContent(
+                                              section: section,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const MiniPlayer(),
+                                  if (isMobile) const _MobileNavigation(),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const MiniPlayer(),
-                        if (isMobile) const _MobileNavigation(),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -187,10 +200,11 @@ class _MobileNavigation extends ConsumerWidget {
     final section = ref.watch(currentSectionProvider);
     final l10n = AppLocalizations.of(context)!;
     final selected = switch (section) {
-      AppSection.library => 0,
-      AppSection.nowPlaying || AppSection.lyrics => 1,
-      AppSection.addSource => 2,
-      AppSection.settings => 3,
+      AppSection.home => 0,
+      AppSection.library => 1,
+      AppSection.search => 2,
+      AppSection.nowPlaying || AppSection.lyrics => 3,
+      AppSection.addSource || AppSection.settings => 4,
     };
     return NavigationBar(
       height: 66,
@@ -198,18 +212,31 @@ class _MobileNavigation extends ConsumerWidget {
       indicatorColor: context.petal.colors.accent.withOpacity(0.22),
       selectedIndex: selected,
       onDestinationSelected: (index) {
+        if (index == 1 || index == 2) {
+          ref.read(libraryControllerProvider.notifier).setTab(LibraryTab.songs);
+        }
         ref.read(currentSectionProvider.notifier).state = switch (index) {
-          0 => AppSection.library,
-          1 => AppSection.nowPlaying,
-          2 => AppSection.addSource,
-          _ => AppSection.settings,
+          0 => AppSection.home,
+          1 => AppSection.library,
+          2 => AppSection.search,
+          3 => AppSection.nowPlaying,
+          _ => AppSection.addSource,
         };
       },
       destinations: [
+        const NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: 'Home',
+        ),
         NavigationDestination(
           icon: const Icon(Icons.library_music_outlined),
           selectedIcon: const Icon(Icons.library_music),
           label: l10n.library,
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.search_rounded),
+          label: l10n.search,
         ),
         NavigationDestination(
           icon: const Icon(Icons.album_outlined),
@@ -220,11 +247,6 @@ class _MobileNavigation extends ConsumerWidget {
           icon: const Icon(Icons.add_circle_outline),
           selectedIcon: const Icon(Icons.add_circle),
           label: l10n.add,
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.settings_outlined),
-          selectedIcon: const Icon(Icons.settings),
-          label: l10n.settings,
         ),
       ],
     );
@@ -238,8 +260,12 @@ class _MainContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     switch (section) {
+      case AppSection.home:
+        return const LibraryOverview();
       case AppSection.library:
         return const LibraryScreen();
+      case AppSection.search:
+        return const LibraryScreen(searchMode: true);
       case AppSection.nowPlaying:
         return const NowPlayingScreen();
       case AppSection.lyrics:

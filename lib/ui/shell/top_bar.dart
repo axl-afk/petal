@@ -44,8 +44,17 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
       width: isMobile ? double.infinity : 320,
       height: 42,
       child: TextField(
+        key: ValueKey(section == AppSection.search),
+        autofocus: section == AppSection.search,
+        onTap: () {
+          if (section != AppSection.search) {
+            ref
+                .read(libraryControllerProvider.notifier)
+                .setTab(LibraryTab.songs);
+            ref.read(currentSectionProvider.notifier).state = AppSection.search;
+          }
+        },
         onChanged: (q) {
-          ref.read(currentSectionProvider.notifier).state = AppSection.library;
           ref.read(libraryControllerProvider.notifier).setSearchQuery(q);
         },
         style: TextStyle(fontSize: 13.5, color: petal.colors.ink),

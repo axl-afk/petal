@@ -217,6 +217,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(artist: artist),
+      searchQuery: '',
     );
   }
 
@@ -225,6 +226,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(genre: genre),
+      searchQuery: '',
     );
   }
 
@@ -233,6 +235,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(album: album),
+      searchQuery: '',
     );
   }
 
@@ -241,6 +244,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(playlistId: id, playlistName: name),
+      searchQuery: '',
     );
   }
 
