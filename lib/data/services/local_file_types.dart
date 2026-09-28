@@ -19,6 +19,8 @@ class ImportedAudioFile {
   final String genre;
   final int durationMs;
   final String? artworkPath;
+  final String? lyricsLrc;
+  final String? lyricsPlain;
 
   const ImportedAudioFile({
     required this.id,
@@ -29,5 +31,7 @@ class ImportedAudioFile {
     required this.genre,
     required this.durationMs,
     this.artworkPath,
+    this.lyricsLrc,
+    this.lyricsPlain,
   });
 }

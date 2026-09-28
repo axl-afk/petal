@@ -97,7 +97,7 @@ class MiniPlayer extends ConsumerWidget {
                                 : Icons.favorite_border,
                           ),
                           color: track.isFavorite
-                              ? petal.colors.accent
+                              ? petal.colors.favorite
                               : petal.colors.ink2,
                           onPressed: () => ref
                               .read(libraryControllerProvider.notifier)

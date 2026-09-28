@@ -11,6 +11,7 @@ import '../../state/playback_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import 'track_art.dart';
+import 'add_to_playlist_sheet.dart';
 
 /// The track listing used by every "songs" view (full library, an artist,
 /// a genre, a playlist, favorites, or search results) — same table, just a
@@ -36,13 +37,18 @@ class TrackTable extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.library_music_outlined,
-                  size: 42, color: petal.colors.ink3),
+              Icon(
+                Icons.library_music_outlined,
+                size: 42,
+                color: petal.colors.ink3,
+              ),
               const SizedBox(height: 12),
               Text('Nothing here yet.', style: petal.text.sectionTitle),
               const SizedBox(height: 4),
-              Text('Add a source or scan this device for music.',
-                  style: petal.text.meta),
+              Text(
+                'Add a source or scan this device for music.',
+                style: petal.text.meta,
+              ),
             ],
           ),
         ),
@@ -62,40 +68,35 @@ class TrackTable extends ConsumerWidget {
     // produce invalid remaining-paint geometry while a desktop window entered
     // fullscreen, and release builds rendered the whole center pane blank.
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, rawIndex) {
-          if (rawIndex == 0) {
-            return _TrackHeader(
-              showDetails: MediaQuery.sizeOf(context).width >= 720,
-            );
-          }
-          final i = rawIndex - 1;
-          final track = tracks[i];
-          return _TrackRow(
-            key: ValueKey(track.id),
-            index: i + 1,
-            track: track,
-            isCurrent: playback.current?.id == track.id,
-            isPlaying:
-                playback.isPlaying && playback.current?.id == track.id,
-            onPlay: () => controller.playSingle(track, context: tracks),
-            onToggleFavorite: () => ref
-                .read(libraryControllerProvider.notifier)
-                .toggleFavorite(track),
-            onOpenNowPlaying: () =>
-                ref.read(currentSectionProvider.notifier).state =
-                    AppSection.nowPlaying,
-            downloadState: downloads[track.id],
-            onDownload: () => ref
-                .read(downloadControllerProvider.notifier)
-                .download(track),
-            onRemoveDownload: () => ref
-                .read(downloadControllerProvider.notifier)
-                .remove(track),
+      delegate: SliverChildBuilderDelegate((context, rawIndex) {
+        if (rawIndex == 0) {
+          return _TrackHeader(
+            showDetails: MediaQuery.sizeOf(context).width >= 720,
           );
-        },
-        childCount: tracks.length + 1,
-      ),
+        }
+        final i = rawIndex - 1;
+        final track = tracks[i];
+        return _TrackRow(
+          key: ValueKey(track.id),
+          index: i + 1,
+          track: track,
+          isCurrent: playback.current?.id == track.id,
+          isPlaying: playback.isPlaying && playback.current?.id == track.id,
+          onPlay: () => controller.playSingle(track, context: tracks),
+          onToggleFavorite: () => ref
+              .read(libraryControllerProvider.notifier)
+              .toggleFavorite(track),
+          onAddToPlaylist: () => AddToPlaylistSheet.show(context, track),
+          onOpenNowPlaying: () =>
+              ref.read(currentSectionProvider.notifier).state =
+                  AppSection.nowPlaying,
+          downloadState: downloads[track.id],
+          onDownload: () =>
+              ref.read(downloadControllerProvider.notifier).download(track),
+          onRemoveDownload: () =>
+              ref.read(downloadControllerProvider.notifier).remove(track),
+        );
+      }, childCount: tracks.length + 1),
     );
   }
 }
@@ -125,11 +126,15 @@ class _TrackHeader extends StatelessWidget {
             Expanded(flex: 2, child: Text('Album', style: petal.text.meta)),
             SizedBox(
               width: 70,
-              child: Icon(Icons.schedule_rounded,
-                  size: 14, color: petal.colors.ink3),
+              child: Icon(
+                Icons.schedule_rounded,
+                size: 14,
+                color: petal.colors.ink3,
+              ),
             ),
           ],
           const SizedBox(width: 34),
+          const SizedBox(width: 36),
           const SizedBox(width: 36),
         ],
       ),
@@ -144,6 +149,7 @@ class _TrackRow extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onPlay;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onAddToPlaylist;
   final VoidCallback onOpenNowPlaying;
   final TrackDownloadState? downloadState;
   final VoidCallback onDownload;
@@ -157,6 +163,7 @@ class _TrackRow extends StatefulWidget {
     required this.isPlaying,
     required this.onPlay,
     required this.onToggleFavorite,
+    required this.onAddToPlaylist,
     required this.onOpenNowPlaying,
     required this.downloadState,
     required this.onDownload,
@@ -264,15 +271,28 @@ class _TrackRowState extends State<_TrackRow> {
                   ),
                 ],
                 SizedBox(
+                  width: 36,
+                  child: IconButton(
+                    tooltip: 'Add to playlist',
+                    padding: EdgeInsets.zero,
+                    iconSize: 19,
+                    icon: const Icon(Icons.playlist_add_rounded),
+                    onPressed: widget.onAddToPlaylist,
+                  ),
+                ),
+                SizedBox(
                   width: 34,
                   child: IconButton(
+                    tooltip: track.isFavorite
+                        ? 'Remove from favorites'
+                        : 'Add to favorites',
                     padding: EdgeInsets.zero,
                     iconSize: 16,
                     icon: Icon(
                       track.isFavorite ? Icons.favorite : Icons.favorite_border,
                     ),
                     color: track.isFavorite
-                        ? petal.colors.ink
+                        ? petal.colors.favorite
                         : petal.colors.ink3,
                     onPressed: widget.onToggleFavorite,
                   ),

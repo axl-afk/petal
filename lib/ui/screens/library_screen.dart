@@ -13,6 +13,8 @@ import '../../data/models/track_extensions.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/collection_layout.dart';
 import '../widgets/grid_card.dart';
+import '../widgets/glass_surface.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/track_art.dart';
 import '../widgets/track_table.dart';
 
@@ -119,45 +121,49 @@ class LibraryOverview extends ConsumerWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(24, 26, 24, 14),
           sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('YOUR SPACE', style: petal.text.heroEyebrow),
-                const SizedBox(height: 4),
-                Text('Listen your way', style: petal.text.heroTitle),
-                const SizedBox(height: 6),
-                Text(
-                  'Local and cloud music, together in one library.',
-                  style: petal.text.heroSub,
-                ),
-                const SizedBox(height: 22),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _OverviewShortcut(
-                      icon: Icons.favorite_rounded,
-                      title: 'Favorite songs',
-                      onTap: () => openTab(LibraryTab.favorites),
-                    ),
-                    _OverviewShortcut(
-                      icon: Icons.queue_music_rounded,
-                      title: 'Playlists',
-                      onTap: () => openTab(LibraryTab.playlists),
-                    ),
-                    _OverviewShortcut(
-                      icon: Icons.album_rounded,
-                      title: 'Albums',
-                      onTap: () => openTab(LibraryTab.albums),
-                    ),
-                    _OverviewShortcut(
-                      icon: Icons.music_note_rounded,
-                      title: 'All songs',
-                      onTap: () => openTab(LibraryTab.songs),
-                    ),
-                  ],
-                ),
-              ],
+            child: GlassSurface(
+              padding: const EdgeInsets.fromLTRB(26, 22, 26, 24),
+              tint: context.petal.colors.surface.withOpacity(.27),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('YOUR SPACE', style: petal.text.heroEyebrow),
+                  const SizedBox(height: 4),
+                  Text('Listen your way', style: petal.text.heroTitle),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Local and cloud music, together in one library.',
+                    style: petal.text.heroSub,
+                  ),
+                  const SizedBox(height: 22),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _OverviewShortcut(
+                        icon: Icons.favorite_rounded,
+                        title: 'Favorite songs',
+                        onTap: () => openTab(LibraryTab.favorites),
+                      ),
+                      _OverviewShortcut(
+                        icon: Icons.queue_music_rounded,
+                        title: 'Playlists',
+                        onTap: () => openTab(LibraryTab.playlists),
+                      ),
+                      _OverviewShortcut(
+                        icon: Icons.album_rounded,
+                        title: 'Albums',
+                        onTap: () => openTab(LibraryTab.albums),
+                      ),
+                      _OverviewShortcut(
+                        icon: Icons.music_note_rounded,
+                        title: 'All songs',
+                        onTap: () => openTab(LibraryTab.songs),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -289,18 +295,32 @@ class LibraryOverview extends ConsumerWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        trailing: IconButton(
-                          tooltip: track.isFavorite
-                              ? 'Remove from favorites'
-                              : 'Add to favorites',
-                          icon: Icon(
-                            track.isFavorite
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                          ),
-                          onPressed: () => ref
-                              .read(libraryControllerProvider.notifier)
-                              .toggleFavorite(track),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Add to playlist',
+                              onPressed: () =>
+                                  AddToPlaylistSheet.show(context, track),
+                              icon: const Icon(Icons.playlist_add_rounded),
+                            ),
+                            IconButton(
+                              tooltip: track.isFavorite
+                                  ? 'Remove from favorites'
+                                  : 'Add to favorites',
+                              icon: Icon(
+                                track.isFavorite
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: track.isFavorite
+                                    ? context.petal.colors.favorite
+                                    : context.petal.colors.ink2,
+                              ),
+                              onPressed: () => ref
+                                  .read(libraryControllerProvider.notifier)
+                                  .toggleFavorite(track),
+                            ),
+                          ],
                         ),
                         onTap: () => ref
                             .read(playbackControllerProvider.notifier)
@@ -331,10 +351,28 @@ class _OverviewShortcut extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => ActionChip(
-    avatar: Icon(icon, size: 18, color: context.petal.colors.accent),
-    label: Text(title),
-    onPressed: onTap,
+  Widget build(BuildContext context) => GlassSurface(
+    borderRadius: BorderRadius.circular(999),
+    blur: 10,
+    padding: EdgeInsets.zero,
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 17, color: context.petal.colors.accent),
+              const SizedBox(width: 6),
+              Text(title, style: context.petal.text.meta),
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 }
 

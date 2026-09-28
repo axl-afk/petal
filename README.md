@@ -658,17 +658,10 @@ covers about credentials:
   velocity shortcut, since both screens are fixed non-scrolling layouts
   with no competing scroll gesture to fight.
 - **First-run screen now asks to sign in or "just play music on this
-  device"**, and on Android shows a real permission request for audio-file
-  access. That Android permission is *not* required by anything Petal does
-  today — verified against `file_picker`'s own manifest/changelog that its
-  Android (Storage Access Framework) and iOS (system document picker) flows
-  both already work with zero runtime permission grants, so declining it
-  doesn't break importing music at all. It's there for two honest reasons:
-  the product explicitly wants that first-run moment, and it's real,
-  working plumbing for a future on-device library scan (the phone
-  equivalent of "Scan whole computer," not implemented yet — see below).
-  iOS shows no permission button, since none exists to request; the screen
-  says so instead of faking one.
+  device"**, gives a four-step tour of Add Source, Library, playlists,
+  player, lyrics and Settings, and is available again under Settings → Help.
+  Android requests audio access for MediaStore discovery; file picking still
+  works if it is declined. iPhone and iPad use the system Files picker.
 - **Playlist/library track rows now show album art** (or the same
   placeholder icon Mini Player and Now Playing already used) — they simply
   never rendered any artwork/icon before, unlike every other place a track
@@ -691,6 +684,18 @@ covers about credentials:
   If a file has no tags at all, or `audio_metadata_reader` can't parse it,
   Petal falls back to a filename-derived title and the plain placeholder
   icon rather than failing the import.
+  A same-name UTF-8 `.lrc` file is imported alongside local audio, retaining
+  scripts such as Hindi, Urdu and Bengali. In the lyrics-only screen, the
+  edit button also accepts plain text or timed LRC in any language. Online
+  lyric lookup depends on catalog coverage and cannot supply every song;
+  manually supplied lyrics remain available for that song. Musepack `.mpc`
+  is not currently a supported playback format, so importing it would not
+  honestly promise that it can play. FLAC is supported for local metadata
+  and playback where the device's decoder supports it.
+  Add Source can import a selected Google Drive folder link recursively, or
+  a selected path within the signed-in user's OneDrive (for example
+  `Music/Jazz`), without scanning the entire cloud account. Folder scans
+  are bounded to avoid accidental very large imports.
 - **Imported local files are copied, not linked**: picking a file (or
   scanning a folder) copies it into Petal's own app-support storage rather
   than just remembering the original path. This roughly doubles disk usage

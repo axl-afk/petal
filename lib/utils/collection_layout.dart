@@ -21,9 +21,15 @@ class CollectionLayout {
   }
 
   static double shelfWidth(double viewportWidth) {
-    if (viewportWidth >= 2400) return 370;
-    if (viewportWidth >= 1400) return 285;
-    if (viewportWidth >= 900) return 230;
+    if (viewportWidth >= 2400) {
+      return (viewportWidth / 5.4).clamp(370.0, 560.0);
+    }
+    if (viewportWidth >= 1400) {
+      return (viewportWidth / 5).clamp(285.0, 400.0);
+    }
+    if (viewportWidth >= 900) {
+      return (viewportWidth / 4.5).clamp(230.0, 320.0);
+    }
     if (viewportWidth >= 600) return 195;
     return 164;
   }

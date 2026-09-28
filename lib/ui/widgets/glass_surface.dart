@@ -10,6 +10,7 @@ class GlassSurface extends StatelessWidget {
   final Widget child;
   final BorderRadius borderRadius;
   final EdgeInsetsGeometry? padding;
+  final BoxConstraints? constraints;
   final double blur;
   final Color? tint;
 
@@ -20,7 +21,8 @@ class GlassSurface extends StatelessWidget {
       Radius.circular(PetalTheme.radiusCard),
     ),
     this.padding,
-    this.blur = 18,
+    this.constraints,
+    this.blur = 16,
     this.tint,
   });
 
@@ -33,9 +35,9 @@ class GlassSurface extends StatelessWidget {
         borderRadius: borderRadius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(dark ? .30 : .12),
-            blurRadius: 24,
-            offset: const Offset(0, 9),
+            color: Colors.black.withOpacity(dark ? .32 : .11),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -45,19 +47,22 @@ class GlassSurface extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
           child: Container(
             padding: padding,
+            constraints: constraints,
             decoration: BoxDecoration(
-              color: tint ?? petal.colors.surface.withOpacity(dark ? .32 : .48),
+              color: tint ?? petal.colors.surface.withOpacity(dark ? .44 : .58),
               borderRadius: borderRadius,
               border: Border.all(
-                color: Colors.white.withOpacity(dark ? .20 : .62),
+                color: Colors.white.withOpacity(dark ? .24 : .78),
               ),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.white.withOpacity(dark ? .16 : .42),
-                  Colors.white.withOpacity(dark ? .025 : .10),
+                  Colors.white.withOpacity(dark ? .17 : .42),
+                  Colors.white.withOpacity(dark ? .045 : .12),
+                  Colors.white.withOpacity(dark ? .015 : .035),
                 ],
+                stops: const [0, .48, 1],
               ),
             ),
             child: child,

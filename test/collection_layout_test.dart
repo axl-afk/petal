@@ -25,5 +25,10 @@ void main() {
       CollectionLayout.shelfWidth(1000),
       lessThan(CollectionLayout.shelfWidth(3000)),
     );
+    expect(
+      CollectionLayout.shelfWidth(1920),
+      lessThan(CollectionLayout.shelfWidth(3840)),
+    );
+    expect(CollectionLayout.shelfWidth(3840), lessThanOrEqualTo(560));
   });
 }

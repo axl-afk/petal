@@ -109,8 +109,10 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
       ],
     );
 
-    final container = Container(
-      color: petal.colors.surface.withOpacity(0.22),
+    final container = GlassSurface(
+      borderRadius: BorderRadius.zero,
+      blur: 12,
+      tint: petal.colors.surface.withOpacity(.24),
       padding: EdgeInsets.symmetric(
         horizontal: isMobile ? 14 : 24,
         vertical: isMobile ? 10 : 0,

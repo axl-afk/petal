@@ -20,6 +20,7 @@ import '../screens/settings_screen.dart';
 import 'mini_player.dart';
 import 'side_rail.dart';
 import 'top_bar.dart';
+import '../widgets/glass_surface.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
@@ -66,13 +67,15 @@ class AppShell extends ConsumerWidget {
         decoration: BoxDecoration(
           gradient: RadialGradient(
             center: const Alignment(-0.75, -0.9),
-            radius: 1.55,
+            radius: 1.8,
             colors: [
               context.petal.colors.accent.withOpacity(
-                Theme.of(context).brightness == Brightness.dark ? 0.13 : 0.10,
+                Theme.of(context).brightness == Brightness.dark ? 0.20 : 0.15,
               ),
+              context.petal.colors.surface2.withOpacity(0.28),
               context.petal.colors.ground,
             ],
+            stops: const [0, .38, 1],
           ),
         ),
         child: ValueListenableBuilder<int>(
@@ -146,8 +149,7 @@ class AppShell extends ConsumerWidget {
                                           // retain a zero-opacity outgoing child after a
                                           // desktop metric/fullscreen change, producing
                                           // the blank grey library seen in screenshots.
-                                          child: ColoredBox(
-                                            color: context.petal.colors.ground,
+                                          child: RepaintBoundary(
                                             child: _MainContent(
                                               section: section,
                                             ),
@@ -206,49 +208,57 @@ class _MobileNavigation extends ConsumerWidget {
       AppSection.nowPlaying || AppSection.lyrics => 3,
       AppSection.addSource || AppSection.settings => 4,
     };
-    return NavigationBar(
-      height: 66,
-      backgroundColor: context.petal.colors.surface.withOpacity(0.88),
-      indicatorColor: context.petal.colors.accent.withOpacity(0.22),
-      selectedIndex: selected,
-      onDestinationSelected: (index) {
-        if (index == 1 || index == 2) {
-          ref.read(libraryControllerProvider.notifier).setTab(LibraryTab.songs);
-        }
-        ref.read(currentSectionProvider.notifier).state = switch (index) {
-          0 => AppSection.home,
-          1 => AppSection.library,
-          2 => AppSection.search,
-          3 => AppSection.nowPlaying,
-          _ => AppSection.addSource,
-        };
-      },
-      destinations: [
-        const NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home_rounded),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.library_music_outlined),
-          selectedIcon: const Icon(Icons.library_music),
-          label: l10n.library,
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.search_rounded),
-          label: l10n.search,
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.album_outlined),
-          selectedIcon: const Icon(Icons.album),
-          label: l10n.playing,
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.add_circle_outline),
-          selectedIcon: const Icon(Icons.add_circle),
-          label: l10n.add,
-        ),
-      ],
+    return GlassSurface(
+      borderRadius: BorderRadius.zero,
+      blur: 10,
+      tint: context.petal.colors.surface.withOpacity(.38),
+      child: NavigationBar(
+        height: 66,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: context.petal.colors.accent.withOpacity(0.22),
+        selectedIndex: selected,
+        onDestinationSelected: (index) {
+          if (index == 1 || index == 2) {
+            ref
+                .read(libraryControllerProvider.notifier)
+                .setTab(LibraryTab.songs);
+          }
+          ref.read(currentSectionProvider.notifier).state = switch (index) {
+            0 => AppSection.home,
+            1 => AppSection.library,
+            2 => AppSection.search,
+            3 => AppSection.nowPlaying,
+            _ => AppSection.addSource,
+          };
+        },
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.library_music_outlined),
+            selectedIcon: const Icon(Icons.library_music),
+            label: l10n.library,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.search_rounded),
+            label: l10n.search,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.album_outlined),
+            selectedIcon: const Icon(Icons.album),
+            label: l10n.playing,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.add_circle_outline),
+            selectedIcon: const Icon(Icons.add_circle),
+            label: l10n.add,
+          ),
+        ],
+      ),
     );
   }
 }

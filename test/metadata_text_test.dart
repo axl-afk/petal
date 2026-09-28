@@ -27,7 +27,21 @@ void main() {
   });
 
   test('preserves correctly decoded multilingual metadata', () {
-    for (final title in ['Москва', 'Αθήνα', '東京', '서울', 'ঢাকা', 'Édith Piaf']) {
+    for (final title in [
+      'Москва',
+      'Αθήνα',
+      '東京',
+      '서울',
+      'ঢাকা',
+      'Édith Piaf',
+      'أم كلثوم',
+      'עידן רייכל',
+      'เพลงรัก',
+      'မြန်မာသီချင်း',
+      'ጤና ይስጥልኝ',
+      'ქართული სიმღერა',
+      '🎵 música',
+    ]) {
       expect(cleanMetadataText(title), title);
     }
   });

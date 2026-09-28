@@ -67,6 +67,10 @@ class GridCard extends StatelessWidget {
                           fit: BoxFit.cover,
                           width: constraints.maxWidth,
                           height: constraints.maxHeight,
+                          cacheWidth:
+                              (constraints.maxWidth *
+                                      MediaQuery.devicePixelRatioOf(context))
+                                  .ceil(),
                         )
                       : artworkUrl != null && artworkUrl!.isNotEmpty
                       ? TrackArt(

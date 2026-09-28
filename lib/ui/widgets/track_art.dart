@@ -32,6 +32,7 @@ class TrackArt extends StatelessWidget {
     final petal = context.petal;
     final radius = borderRadius ?? BorderRadius.circular(8);
     final url = artworkUrl ?? track?.artworkUrl;
+    final decodeWidth = (size * MediaQuery.devicePixelRatioOf(context)).ceil();
 
     Widget placeholder() => Container(
       width: size,
@@ -53,6 +54,7 @@ class TrackArt extends StatelessWidget {
           url,
           width: size,
           height: size,
+          cacheWidth: decodeWidth,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => placeholder(),
         ),
@@ -63,6 +65,7 @@ class TrackArt extends StatelessWidget {
       return _ContentArtwork(
         uri: url,
         size: size,
+        decodeWidth: decodeWidth,
         radius: radius,
         placeholder: placeholder,
       );
@@ -71,6 +74,7 @@ class TrackArt extends StatelessWidget {
     return buildLocalTrackArt(
       path: url,
       size: size,
+      decodeWidth: decodeWidth,
       radius: radius,
       placeholder: placeholder,
     );
@@ -80,12 +84,14 @@ class TrackArt extends StatelessWidget {
 class _ContentArtwork extends StatefulWidget {
   final String uri;
   final double size;
+  final int decodeWidth;
   final BorderRadius radius;
   final Widget Function() placeholder;
 
   const _ContentArtwork({
     required this.uri,
     required this.size,
+    required this.decodeWidth,
     required this.radius,
     required this.placeholder,
   });
@@ -124,6 +130,7 @@ class _ContentArtworkState extends State<_ContentArtwork> {
             bytes,
             width: widget.size,
             height: widget.size,
+            cacheWidth: widget.decodeWidth,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => widget.placeholder(),
           ),

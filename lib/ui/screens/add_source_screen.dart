@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/resolved_source.dart';
+import '../../data/models/auth_session.dart';
 import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../theme/app_theme.dart';
@@ -20,6 +21,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
   final _linkController = TextEditingController();
   final _titleController = TextEditingController();
   final _artistController = TextEditingController();
+  final _oneDriveFolderController = TextEditingController();
+  bool _busyFolder = false;
+  String? _folderStatus;
   bool _busy = false;
   bool _busyLocal = false;
   String? _error;
@@ -33,6 +37,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
     _linkController.dispose();
     _titleController.dispose();
     _artistController.dispose();
+    _oneDriveFolderController.dispose();
     super.dispose();
   }
 
@@ -85,6 +90,31 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       return 'Imported $imported song${imported == 1 ? '' : 's'} from that folder — check Songs in your Library.';
     }
     return 'Imported $imported of $found songs from that folder — the rest couldn\'t be read.';
+  }
+
+  Future<void> _scanOneDriveFolder() async {
+    if (_oneDriveFolderController.text.trim().isEmpty) {
+      setState(
+        () => _folderStatus = 'Enter a folder path, for example Music/Jazz.',
+      );
+      return;
+    }
+    setState(() {
+      _busyFolder = true;
+      _folderStatus = null;
+    });
+    try {
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .scanConnectedCloud(
+            oneDriveFolderPath: _oneDriveFolderController.text.trim(),
+          );
+      if (mounted) setState(() => _folderStatus = _resultMessage(result));
+    } catch (error) {
+      if (mounted) setState(() => _folderStatus = error.toString());
+    } finally {
+      if (mounted) setState(() => _busyFolder = false);
+    }
   }
 
   Future<void> _importLocal() async {
@@ -232,241 +262,297 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add a source',
-              style: petal.text.heroTitle.copyWith(fontSize: 22),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Paste a single-song share link, a whole Google Drive folder link (needs Google '
-              'sign-in — imports every song directly inside it), or import files from this device.',
-              style: petal.text.heroSub,
-            ),
-            const SizedBox(height: 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 860),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add a source',
+                style: petal.text.heroTitle.copyWith(fontSize: 22),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Choose exactly what to import: individual songs, a folder on this device, a Google Drive folder link, or an account-wide cloud scan.',
+                style: petal.text.heroSub,
+              ),
+              const SizedBox(height: 24),
 
-            _Card(
-              title: 'From a link',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Field(
-                    controller: _linkController,
-                    hint: 'A song link, a Drive folder link (drive.google.com/drive/folders/...), or a OneDrive link',
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _Field(
-                          controller: _titleController,
-                          hint: 'Title (optional)',
+              _Card(
+                title: 'A song or selected Google Drive folder',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Field(
+                      controller: _linkController,
+                      hint: 'Song link or Google Drive folder link (drive.google.com/drive/folders/...)',
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Paste a Google Drive folder link to import only that folder and its subfolders. Sign in with Google first. A OneDrive link can add an individual song.',
+                      style: petal.text.cardSubtitle,
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _Field(
+                            controller: _titleController,
+                            hint: 'Title (optional)',
+                          ),
                         ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _Field(
+                            controller: _artistController,
+                            hint: 'Artist (optional)',
+                          ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Leave title blank for a single Google Drive file and, if you\'re signed in, '
+                        'Petal fills it in from the file\'s real name automatically.',
+                        style: petal.text.cardSubtitle,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _Field(
-                          controller: _artistController,
-                          hint: 'Artist (optional)',
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: petal.colors.accent,
+                          foregroundColor: petal.colors.accentInk,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              PetalTheme.radiusPill,
+                            ),
+                          ),
+                        ),
+                        onPressed: _busy ? null : _connect,
+                        child: _busy
+                            ? SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: petal.colors.accentInk,
+                                ),
+                              )
+                            : const Text('Connect'),
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Colors.redAccent.shade200,
+                          fontSize: 12.5,
                         ),
                       ),
                     ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      'Leave title blank for a single Google Drive file and, if you\'re signed in, '
-                      'Petal fills it in from the file\'s real name automatically.',
-                      style: petal.text.cardSubtitle,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: petal.colors.accent,
-                        foregroundColor: petal.colors.accentInk,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            PetalTheme.radiusPill,
-                          ),
+                    if (_success != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _success!,
+                        style: TextStyle(
+                          color: petal.colors.good,
+                          fontSize: 12.5,
                         ),
                       ),
-                      onPressed: _busy ? null : _connect,
-                      child: _busy
-                          ? SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: petal.colors.accentInk,
-                              ),
-                            )
-                          : const Text('Connect'),
-                    ),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Colors.redAccent.shade200,
-                        fontSize: 12.5,
-                      ),
-                    ),
+                    ],
                   ],
-                  if (_success != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      _success!,
-                      style: TextStyle(
-                        color: petal.colors.good,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            _Card(
-              title: 'From this device',
-              child: kIsWeb
-                  ? Text(
-                      'The web version of Petal doesn\'t have access to local files — install the app for macOS, Windows, Linux, Android, or iOS to import from your device.',
-                      style: petal.text.cardSubtitle,
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Import audio files already on this device.',
-                          style: petal.text.cardSubtitle,
+              if (ref.watch(authControllerProvider).session?.provider ==
+                  AuthProviderKind.microsoft) ...[
+                _Card(
+                  title: 'Only a selected OneDrive folder',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Enter the path inside your OneDrive. Petal scans that folder and its subfolders, leaving the rest of your Drive alone.',
+                        style: petal.text.cardSubtitle,
+                      ),
+                      const SizedBox(height: 10),
+                      _Field(
+                        controller: _oneDriveFolderController,
+                        hint: 'Music/Jazz',
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: _busyFolder ? null : _scanOneDriveFolder,
+                        icon: const Icon(Icons.folder_open_rounded),
+                        label: Text(
+                          _busyFolder
+                              ? 'Scanning folder…'
+                              : 'Import this folder',
                         ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            if (_isApple)
-                              FilledButton.icon(
-                                onPressed: _busyLocal ? null : _importLocal,
-                                icon: const Icon(Icons.cloud_outlined, size: 18),
-                                label: const Text('Choose from iCloud Drive'),
-                              ),
-                            if (_isAndroid)
-                              FilledButton.icon(
-                                onPressed: _busyLocal ? null : _scanDeviceMusic,
-                                icon: const Icon(
-                                  Icons.library_music_outlined,
-                                  size: 18,
-                                ),
-                                label: const Text('Find device music'),
-                              ),
-                            OutlinedButton.icon(
-                              onPressed: _busyLocal ? null : _importLocal,
-                              icon: const Icon(
-                                Icons.insert_drive_file_outlined,
-                                size: 18,
-                              ),
-                              label: const Text('Choose files'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _busyLocal ? null : _importFolder,
-                              icon: const Icon(
-                                Icons.folder_open_outlined,
-                                size: 18,
-                              ),
-                              label: const Text('Choose a folder'),
-                            ),
-                            if (_isDesktop)
-                              OutlinedButton.icon(
-                                onPressed: _busyLocal ? null : _scanMusicFolder,
-                                icon: const Icon(
-                                  Icons.travel_explore_outlined,
-                                  size: 18,
-                                ),
-                                label: const Text('Scan Music folder'),
-                              ),
-                            if (_isDesktop)
-                              OutlinedButton.icon(
-                                onPressed: _busyLocal
-                                    ? null
-                                    : _scanWholeComputer,
-                                icon: const Icon(Icons.dns_outlined, size: 18),
-                                label: const Text('Scan whole computer'),
-                              ),
-                          ],
-                        ),
-                        if (_busyLocal) ...[
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              SizedBox(
-                                height: 14,
-                                width: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: petal.colors.ink2,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _wholeComputerProgress != null
-                                    ? 'Scanning your computer… $_wholeComputerProgress song${_wholeComputerProgress == 1 ? '' : 's'} found so far'
-                                    : 'Scanning and importing…',
-                                style: petal.text.meta,
-                              ),
-                            ],
-                          ),
-                        ],
+                      ),
+                      if (_folderStatus != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 10),
                           child: Text(
-                            '"Choose a folder" imports everything found in it, including subfolders. "Scan Music folder" '
-                            'does the same for this machine\'s own Music folder — a quick way to pull in your whole '
-                            'existing library without navigating to it by hand. "Scan whole computer" checks every '
-                            'drive this machine can see, not just the Music folder — slower, but thorough if your '
-                            'music lives somewhere else. On Android, “Find device music” reads the system MediaStore. '
-                            'On iPhone and iPad, Apple does not expose a whole-device file scan, so use “Choose files” '
-                            'and the native document picker. On Apple devices, “Choose from iCloud Drive” uses the '
-                            'Apple ID already signed into the device; Apple does not expose a separate third-party '
-                            'iCloud password login or whole-drive scanning API.',
+                            _folderStatus!,
                             style: petal.text.cardSubtitle,
                           ),
                         ),
-                        if (_localError != null) ...[
-                          const SizedBox(height: 10),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              _Card(
+                title: 'From this device',
+                child: kIsWeb
+                    ? Text(
+                        'The web version of Petal doesn\'t have access to local files — install the app for macOS, Windows, Linux, Android, or iOS to import from your device.',
+                        style: petal.text.cardSubtitle,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            _localError!,
-                            style: TextStyle(
-                              color: Colors.redAccent.shade200,
-                              fontSize: 12.5,
+                            'Import audio files already on this device.',
+                            style: petal.text.cardSubtitle,
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              if (_isApple)
+                                FilledButton.icon(
+                                  onPressed: _busyLocal ? null : _importLocal,
+                                  icon: const Icon(
+                                    Icons.cloud_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Choose from iCloud Drive'),
+                                ),
+                              if (_isAndroid)
+                                FilledButton.icon(
+                                  onPressed: _busyLocal
+                                      ? null
+                                      : _scanDeviceMusic,
+                                  icon: const Icon(
+                                    Icons.library_music_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Find device music'),
+                                ),
+                              OutlinedButton.icon(
+                                onPressed: _busyLocal ? null : _importLocal,
+                                icon: const Icon(
+                                  Icons.insert_drive_file_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Choose files'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _busyLocal ? null : _importFolder,
+                                icon: const Icon(
+                                  Icons.folder_open_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Choose a folder'),
+                              ),
+                              if (_isDesktop)
+                                OutlinedButton.icon(
+                                  onPressed: _busyLocal
+                                      ? null
+                                      : _scanMusicFolder,
+                                  icon: const Icon(
+                                    Icons.travel_explore_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Scan Music folder'),
+                                ),
+                              if (_isDesktop)
+                                OutlinedButton.icon(
+                                  onPressed: _busyLocal
+                                      ? null
+                                      : _scanWholeComputer,
+                                  icon: const Icon(
+                                    Icons.dns_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Scan whole computer'),
+                                ),
+                            ],
+                          ),
+                          if (_busyLocal) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  height: 14,
+                                  width: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: petal.colors.ink2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _wholeComputerProgress != null
+                                      ? 'Scanning your computer… $_wholeComputerProgress song${_wholeComputerProgress == 1 ? '' : 's'} found so far'
+                                      : 'Scanning and importing…',
+                                  style: petal.text.meta,
+                                ),
+                              ],
+                            ),
+                          ],
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                              '"Choose a folder" imports everything found in it, including subfolders. "Scan Music folder" '
+                              'does the same for this machine\'s own Music folder — a quick way to pull in your whole '
+                              'existing library without navigating to it by hand. "Scan whole computer" checks every '
+                              'drive this machine can see, not just the Music folder — slower, but thorough if your '
+                              'music lives somewhere else. On Android, “Find device music” reads the system MediaStore. '
+                              'On iPhone and iPad, Apple does not expose a whole-device file scan, so use “Choose files” '
+                              'and the native document picker. On Apple devices, “Choose from iCloud Drive” uses the '
+                              'Apple ID already signed into the device; Apple does not expose a separate third-party '
+                              'iCloud password login or whole-drive scanning API.',
+                              style: petal.text.cardSubtitle,
                             ),
                           ),
-                        ],
-                        if (_localSuccess != null) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            _localSuccess!,
-                            style: TextStyle(
-                              color: petal.colors.good,
-                              fontSize: 12.5,
+                          if (_localError != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              _localError!,
+                              style: TextStyle(
+                                color: Colors.redAccent.shade200,
+                                fontSize: 12.5,
+                              ),
                             ),
-                          ),
+                          ],
+                          if (_localSuccess != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              _localSuccess!,
+                              style: TextStyle(
+                                color: petal.colors.good,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-            ),
-          ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -514,14 +600,14 @@ class _Field extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13),
         filled: true,
-        fillColor: petal.colors.surface2,
+        fillColor: petal.colors.surface2.withOpacity(.38),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 12,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: petal.colors.hairline2),
         ),
       ),
     );

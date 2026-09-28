@@ -9,6 +9,7 @@ import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../state/onboarding_controller.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 
 /// First-run screen: "sign in, or just play music already on this device"
 /// (the product's own framing), plus — on Android — the explicit
@@ -88,63 +89,81 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final auth = ref.watch(authControllerProvider);
 
     return Scaffold(
-      backgroundColor: petal.colors.surface,
+      backgroundColor: petal.colors.ground,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(28),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      'assets/icon/icon_square.png',
-                      width: 72,
-                      height: 72,
+              constraints: const BoxConstraints(maxWidth: 568),
+              child: GlassSurface(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.asset(
+                        'assets/icon/icon_square.png',
+                        width: 72,
+                        height: 72,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text('Petal', style: petal.text.heroTitle.copyWith(fontSize: 28), textAlign: TextAlign.center),
-                  const SizedBox(height: 10),
-                  Semantics(
-                    label: 'Introduction step ${_step + 1} of 3',
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(3, (index) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        height: 6,
-                        width: index == _step ? 24 : 8,
-                        decoration: BoxDecoration(
-                          color: index == _step ? petal.colors.accent : petal.colors.ink3,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      )),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Petal',
+                      style: petal.text.heroTitle.copyWith(fontSize: 28),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: KeyedSubtree(key: ValueKey(_step), child: _buildStep(context, auth)),
-                  ),
-                  const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      if (_step > 0)
-                        TextButton(onPressed: () => setState(() => _step--), child: const Text('Back')),
-                      const Spacer(),
-                      if (_step < 2)
-                        FilledButton(
-                          onPressed: () => setState(() => _step++),
-                          child: const Text('Next'),
+                    const SizedBox(height: 10),
+                    Semantics(
+                      label: 'Introduction step ${_step + 1} of 4',
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          4,
+                          (index) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            height: 6,
+                            width: index == _step ? 24 : 8,
+                            decoration: BoxDecoration(
+                              color: index == _step
+                                  ? petal.colors.accent
+                                  : petal.colors.ink3,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
-                    ],
-                  ),
-                ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: KeyedSubtree(
+                        key: ValueKey(_step),
+                        child: _buildStep(context, auth),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        if (_step > 0)
+                          TextButton(
+                            onPressed: () => setState(() => _step--),
+                            child: const Text('Back'),
+                          ),
+                        const Spacer(),
+                        if (_step < 3)
+                          FilledButton(
+                            onPressed: () => setState(() => _step++),
+                            child: const Text('Next'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -158,56 +177,130 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final heading = switch (_step) {
       0 => 'Your music, in one place',
       1 => 'Choose where music comes from',
+      2 => 'Find your way around',
       _ => 'Make it yours',
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(heading, style: petal.text.sectionTitle, textAlign: TextAlign.center),
+        Text(
+          heading,
+          style: petal.text.sectionTitle,
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 14),
         if (_step == 0) ...[
-          const _InfoLine(icon: Icons.library_music_outlined, text: 'Browse your songs, artists, albums, playlists and favorites.'),
-          const _InfoLine(icon: Icons.play_circle_outline, text: 'Play, seek, manage the queue and read lyrics when available.'),
-          const _InfoLine(icon: Icons.download_outlined, text: 'Save supported cloud tracks to listen offline.'),
+          const _InfoLine(
+            icon: Icons.library_music_outlined,
+            text:
+                'Browse your songs, artists, albums, playlists and favorites.',
+          ),
+          const _InfoLine(
+            icon: Icons.play_circle_outline,
+            text: 'Play, seek, manage the queue and open a full-screen lyrics-only view.',
+          ),
+          const _InfoLine(
+            icon: Icons.download_outlined,
+            text: 'Save supported cloud tracks to listen offline.',
+          ),
         ] else if (_step == 1) ...[
           if (_isAndroid) ...[
-            const _InfoLine(icon: Icons.phone_android, text: 'Scan audio on this phone, or choose individual files.'),
+            const _InfoLine(
+              icon: Icons.phone_android,
+              text: 'Scan audio on this phone, or choose individual files.',
+            ),
             _PermissionCard(
               granted: _permissionResult?.isGranted ?? false,
-              denied: _permissionResult != null && !_permissionResult!.isGranted,
+              denied:
+                  _permissionResult != null && !_permissionResult!.isGranted,
               busy: _requestingPermission,
               onRequest: _requestAudioAccess,
             ),
           ] else if (_isIOS)
-            const _InfoLine(icon: Icons.folder_open, text: 'Choose audio with the Files picker. iOS does not offer whole-device scanning.')
+            const _InfoLine(
+              icon: Icons.folder_open,
+              text: 'Choose audio with the Files picker on iPhone or iPad. iOS and iPadOS do not offer whole-device scanning.',
+            )
           else if (kIsWeb)
-            const _InfoLine(icon: Icons.web, text: 'Connect cloud music. A browser cannot scan your device storage.')
+            const _InfoLine(
+              icon: Icons.web,
+              text: 'Connect cloud music. A browser cannot scan your device storage.',
+            )
           else
-            const _InfoLine(icon: Icons.folder_open, text: 'Choose files or folders, or scan your Music folder and accessible drives.'),
-          const _InfoLine(icon: Icons.cloud_outlined, text: 'Connect Google Drive or OneDrive to find and play audio in your account.'),
+            const _InfoLine(
+              icon: Icons.folder_open,
+              text: 'Choose files or folders, or scan your Music folder and accessible drives.',
+            ),
+          const _InfoLine(
+            icon: Icons.cloud_outlined,
+            text: 'Scan a connected cloud account, or paste a Google Drive folder link to import only that folder.',
+          ),
+        ] else if (_step == 2) ...[
+          const _InfoLine(
+            icon: Icons.add_circle_outline,
+            text: 'Add Source imports local files, a selected folder, or a supported cloud link.',
+          ),
+          const _InfoLine(
+            icon: Icons.library_music_outlined,
+            text: 'Library groups your songs by album, artist, genre, playlist and favorites. Search finds your music.',
+          ),
+          const _InfoLine(
+            icon: Icons.play_circle_outline,
+            text: 'Tap a song to play. Open Now Playing for the queue, playback controls and lyrics.',
+          ),
+          const _InfoLine(
+            icon: Icons.playlist_add_rounded,
+            text: 'Use the playlist button beside a song to add it to an existing or new playlist; the heart saves a favorite.',
+          ),
+          const _InfoLine(
+            icon: Icons.lyrics_outlined,
+            text: 'Open Lyrics only for an immersive view. Paste plain or timed LRC lyrics in any script if none are found.',
+          ),
+          const _InfoLine(
+            icon: Icons.settings_outlined,
+            text: 'Settings controls appearance, accounts and library sync. This guide is available there later.',
+          ),
         ] else ...[
-          const _InfoLine(icon: Icons.person_outline, text: 'An account is optional. You can start with local music and connect cloud music later.'),
-          const _InfoLine(icon: Icons.security_outlined, text: 'Petal asks for access only when you choose a music source.'),
+          const _InfoLine(
+            icon: Icons.person_outline,
+            text: 'An account is optional. You can start with local music and connect cloud music later.',
+          ),
+          const _InfoLine(
+            icon: Icons.security_outlined,
+            text: 'Petal asks for access only when you choose a music source.',
+          ),
           if (auth.error != null) ...[
             const SizedBox(height: 8),
-            Text(auth.error!, style: TextStyle(color: Colors.redAccent.shade200), textAlign: TextAlign.center),
+            Text(
+              auth.error!,
+              style: TextStyle(color: Colors.redAccent.shade200),
+              textAlign: TextAlign.center,
+            ),
           ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: auth.loading ? null : () => _signIn(AuthProviderKind.google),
+            onPressed: auth.loading
+                ? null
+                : () => _signIn(AuthProviderKind.google),
             icon: const Icon(Icons.g_mobiledata, size: 22),
             label: const Text('Connect Google Drive'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: auth.loading ? null : () => _signIn(AuthProviderKind.microsoft),
+            onPressed: auth.loading
+                ? null
+                : () => _signIn(AuthProviderKind.microsoft),
             icon: const Icon(Icons.window, size: 18),
             label: const Text('Connect OneDrive'),
           ),
           if (auth.loading) const LinearProgressIndicator(),
           TextButton(
             onPressed: auth.loading ? null : _useLocalOnly,
-            child: Text(kIsWeb ? 'Explore Petal without connecting' : 'Continue without an account'),
+            child: Text(
+              kIsWeb
+                  ? 'Explore Petal without connecting'
+                  : 'Continue without an account',
+            ),
           ),
         ],
       ],

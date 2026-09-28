@@ -21,6 +21,7 @@ import '../widgets/equalizer_sheet.dart';
 import '../widgets/group_playback_sheet.dart';
 import '../widgets/swipe_down_to_dismiss.dart';
 import '../widgets/track_art.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 
 enum _PlayerPanel { artwork, lyrics, queue }
 
@@ -88,7 +89,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 final wide = constraints.maxWidth >= 980;
                 return Column(
                   children: [
-                    _PlayerHeader(track: track, onClose: _close),
+                    _PlayerHeader(
+                      track: track,
+                      onClose: _close,
+                      onShowLyrics: () =>
+                          ref.read(currentSectionProvider.notifier).state =
+                              AppSection.lyrics,
+                    ),
                     Expanded(
                       child: wide
                           ? _DesktopPlayer(
@@ -125,8 +132,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 class _PlayerHeader extends StatelessWidget {
   final Track track;
   final VoidCallback onClose;
+  final VoidCallback onShowLyrics;
 
-  const _PlayerHeader({required this.track, required this.onClose});
+  const _PlayerHeader({
+    required this.track,
+    required this.onClose,
+    required this.onShowLyrics,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +190,11 @@ class _PlayerHeader extends StatelessWidget {
                 iconSize: 25,
                 icon: const Icon(Icons.tune_rounded),
               ),
+            IconButton(
+              tooltip: 'Lyrics only',
+              onPressed: onShowLyrics,
+              icon: const Icon(Icons.lyrics_outlined),
+            ),
             IconButton(
               tooltip: 'Full screen',
               onPressed: WindowService.toggleFullscreen,
@@ -572,6 +589,11 @@ class _TrackDetails extends ConsumerWidget {
           ),
         ),
         IconButton(
+          tooltip: 'Add to playlist',
+          onPressed: () => AddToPlaylistSheet.show(context, track),
+          icon: const Icon(Icons.playlist_add_rounded),
+        ),
+        IconButton(
           tooltip: track.isFavorite
               ? 'Remove from favorites'
               : 'Add to favorites',
@@ -583,7 +605,7 @@ class _TrackDetails extends ConsumerWidget {
                 ? Icons.favorite_rounded
                 : Icons.favorite_border_rounded,
           ),
-          color: track.isFavorite ? petal.colors.accent : petal.colors.ink2,
+          color: track.isFavorite ? petal.colors.favorite : petal.colors.ink2,
         ),
       ],
     );
@@ -944,13 +966,18 @@ class _InlineLyrics extends StatefulWidget {
 }
 
 class _InlineLyricsState extends State<_InlineLyrics> {
-  final _scrollController = ItemScrollController();
+  ItemScrollController _scrollController = ItemScrollController();
+  ItemPositionsListener _positions = ItemPositionsListener.create();
   int _lastActive = -1;
 
   @override
   void didUpdateWidget(covariant _InlineLyrics oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.track.id != widget.track.id) _lastActive = -1;
+    if (oldWidget.track.id != widget.track.id) {
+      _lastActive = -1;
+      _scrollController = ItemScrollController();
+      _positions = ItemPositionsListener.create();
+    }
   }
 
   void _keepActiveVisible(int active) {
@@ -961,11 +988,22 @@ class _InlineLyricsState extends State<_InlineLyrics> {
       });
       return;
     }
+    final visible = _positions.itemPositions.value.where(
+      (item) => item.index == active,
+    );
+    // Leave the text at rest while the highlighted line is comfortably in
+    // view. Re-centering on every timestamp causes the jump in the recording.
+    if (visible.isNotEmpty &&
+        visible.first.itemLeadingEdge >= .16 &&
+        visible.first.itemTrailingEdge <= .82) {
+      _lastActive = active;
+      return;
+    }
     _lastActive = active;
     _scrollController.scrollTo(
       index: active,
-      alignment: widget.spacious ? .40 : .30,
-      duration: const Duration(milliseconds: 520),
+      alignment: widget.spacious ? .36 : .30,
+      duration: const Duration(milliseconds: 380),
       curve: Curves.easeOutQuart,
     );
   }
@@ -1010,6 +1048,11 @@ class _InlineLyricsState extends State<_InlineLyrics> {
         ),
       );
     }
+    if (lyrics.synced.isEmpty) {
+      return Center(
+        child: Text('No timed lyric lines.', style: petal.text.meta),
+      );
+    }
     return StreamBuilder<Duration>(
       stream: widget.controller.player.positionStream,
       builder: (context, snapshot) {
@@ -1017,16 +1060,23 @@ class _InlineLyricsState extends State<_InlineLyrics> {
             (snapshot.data ?? Duration.zero) +
             Duration(milliseconds: widget.playback.lyricsOffsetMs);
         final active = currentLyricIndex(lyrics.synced, position);
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _keepActiveVisible(active),
-        );
+        // Show the first upcoming line in place before its timestamp, so
+        // the panel never appears to have lost the first song's lyrics.
+        final visualActive = active < 0 ? 0 : active;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _keepActiveVisible(visualActive);
+        });
         return ScrollablePositionedList.builder(
+          key: ValueKey(widget.track.id),
           itemScrollController: _scrollController,
+          itemPositionsListener: _positions,
+          initialScrollIndex: visualActive,
+          initialAlignment: widget.spacious ? .36 : .30,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           itemCount: lyrics.synced.length,
           itemBuilder: (context, index) {
             final line = lyrics.synced[index];
-            final selected = index == active;
+            final selected = index == visualActive;
             return InkWell(
               borderRadius: BorderRadius.circular(8),
               onTap: () => widget.controller.seekToLyricLine(line),
@@ -1035,15 +1085,14 @@ class _InlineLyricsState extends State<_InlineLyrics> {
                 child: AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 260),
                   curve: Curves.easeOutCubic,
-                  style: selected
-                      ? petal.text.lyricLineActive.copyWith(
-                          fontSize: widget.spacious ? 38 : null,
-                          height: widget.spacious ? 1.35 : null,
-                        )
-                      : petal.text.lyricLine.copyWith(
-                          fontSize: widget.spacious ? 29 : null,
-                          height: widget.spacious ? 1.55 : null,
-                        ),
+                  // Identical metrics for active/inactive lines prevent
+                  // a lyric change from shifting every following row.
+                  style: petal.text.lyricLine.copyWith(
+                    color: selected ? petal.colors.ink : petal.colors.ink2,
+                    fontSize: widget.spacious ? 30 : null,
+                    height: 1.42,
+                    fontWeight: FontWeight.w700,
+                  ),
                   child: Text(line.text),
                 ),
               ),

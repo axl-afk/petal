@@ -81,6 +81,7 @@ class PlaybackState {
 /// [player].durationStream directly via a StreamBuilder, keeping this
 /// notifier's rebuilds cheap.
 class PlaybackController extends StateNotifier<PlaybackState> {
+  int _lyricsRequest = 0;
   late final AudioPlayer player;
   AndroidEqualizer? _equalizer;
   final TrackDao _trackDao;
@@ -350,6 +351,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   Future<void> _loadLyricsFor(Track track) async {
+    final request = ++_lyricsRequest;
     if (track.lyricsLrc != null && track.lyricsLrc!.trim().isNotEmpty) {
       final lines = LyricsService.parseLrc(track.lyricsLrc!);
       if (mounted && state.current?.id == track.id) {
@@ -371,7 +373,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       duration: track.duration,
     );
 
-    if (!mounted || state.current?.id != track.id)
+    if (!mounted || state.current?.id != track.id || request != _lyricsRequest)
       return; // user moved on before this resolved
     state = state.copyWith(lyrics: result);
 
@@ -390,6 +392,42 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     if (track == null) return;
     state = state.copyWith(clearLyrics: true);
     await _loadLyricsFor(track);
+  }
+
+  /// Saves user supplied Unicode plain text or timed LRC on the current song.
+  /// It takes precedence over an in-flight network lookup and survives replay.
+  Future<void> saveLyrics(String input) async {
+    final track = state.current;
+    if (track == null) return;
+    final value = input.trim();
+    if (value.isEmpty) throw ArgumentError('Lyrics cannot be empty.');
+    final lines = LyricsService.parseLrc(value);
+    ++_lyricsRequest;
+    await _trackDao.cacheLyrics(
+      track.id,
+      lrc: lines.isEmpty ? null : value,
+      plain: lines.isEmpty ? value : null,
+    );
+    if (!mounted || state.current?.id != track.id) return;
+    state = state.copyWith(
+      lyrics: lines.isEmpty
+          ? LyricsResult.plain(value)
+          : LyricsResult.synced(lines),
+      queue: [
+        for (final item in state.queue)
+          if (item.id == track.id)
+            item.copyWith(
+              lyricsLrc: lines.isEmpty ? null : value,
+              lyricsPlain: lines.isEmpty ? value : null,
+            )
+          else
+            item,
+      ],
+      current: track.copyWith(
+        lyricsLrc: lines.isEmpty ? null : value,
+        lyricsPlain: lines.isEmpty ? value : null,
+      ),
+    );
   }
 
   @override
