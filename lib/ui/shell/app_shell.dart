@@ -17,7 +17,6 @@ import '../screens/lyrics_screen.dart';
 import '../screens/now_playing_screen.dart';
 import '../screens/settings_screen.dart';
 import 'mini_player.dart';
-import 'right_rail.dart';
 import 'side_rail.dart';
 import 'top_bar.dart';
 
@@ -99,7 +98,6 @@ class AppShell extends ConsumerWidget {
                 final immersive = section == AppSection.nowPlaying ||
                     section == AppSection.lyrics;
                 final showRail = !isMobile;
-                final showRightRail = Breakpoints.isDesktop(width);
                 final scale = UiScale.forWidth(width);
 
                 return UiScale(
@@ -142,7 +140,6 @@ class AppShell extends ConsumerWidget {
                                   child: _MainContent(section: section),
                                 ),
                               ),
-                              if (showRightRail) const RightRail(),
                             ],
                           ),
                         ),
