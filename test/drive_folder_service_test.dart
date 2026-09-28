@@ -19,41 +19,55 @@ void main() {
           visited.add(folder);
           if (folder == 'root' &&
               request.url.queryParameters['pageToken'] == null) {
-            return http.Response(
-              jsonEncode({
-                'nextPageToken': 'next',
-                'files': [
-                  {
-                    'id': 'child',
-                    'name': 'Albums',
-                    'mimeType': 'application/vnd.google-apps.folder',
-                  },
-                  {
-                    'id': 'first',
-                    'name': 'गाना.flac',
-                    'mimeType': 'audio/flac',
-                  },
-                ],
-              }),
+            return http.Response.bytes(
+              utf8.encode(
+                jsonEncode({
+                  'nextPageToken': 'next',
+                  'files': [
+                    {
+                      'id': 'child',
+                      'name': 'Albums',
+                      'mimeType': 'application/vnd.google-apps.folder',
+                    },
+                    {
+                      'id': 'first',
+                      'name': 'गाना.flac',
+                      'mimeType': 'audio/flac',
+                    },
+                  ],
+                }),
+              ),
               200,
             );
           }
           if (folder == 'root') {
-            return http.Response(
-              jsonEncode({
-                'files': [
-                  {'id': 'skip', 'name': 'notes.txt', 'mimeType': 'text/plain'},
-                ],
-              }),
+            return http.Response.bytes(
+              utf8.encode(
+                jsonEncode({
+                  'files': [
+                    {
+                      'id': 'skip',
+                      'name': 'notes.txt',
+                      'mimeType': 'text/plain',
+                    },
+                  ],
+                }),
+              ),
               200,
             );
           }
-          return http.Response(
-            jsonEncode({
-              'files': [
-                {'id': 'second', 'name': 'বাংলা.mp3', 'mimeType': 'audio/mpeg'},
-              ],
-            }),
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'files': [
+                  {
+                    'id': 'second',
+                    'name': 'বাংলা.mp3',
+                    'mimeType': 'audio/mpeg',
+                  },
+                ],
+              }),
+            ),
             200,
           );
         }),

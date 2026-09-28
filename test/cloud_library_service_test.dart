@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -83,18 +85,22 @@ void main() {
           paths.add(request.url.path);
           expect(request.headers['authorization'], 'Bearer token');
           if (request.url.path.endsWith('/children') && paths.length == 1) {
-            return http.Response(
-              '{"value":['
-              '{"id":"sub","name":"Sub","folder":{"childCount":1}},'
-              '{"id":"a","name":"गाना.flac","file":{"mimeType":"audio/flac"}}'
-              ']}',
+            return http.Response.bytes(
+              utf8.encode(
+                '{"value":['
+                '{"id":"sub","name":"Sub","folder":{"childCount":1}},'
+                '{"id":"a","name":"गाना.flac","file":{"mimeType":"audio/flac"}}'
+                ']}',
+              ),
               200,
             );
           }
-          return http.Response(
-            '{"value":['
-            '{"id":"b","name":"বাংলা.mp3","file":{"mimeType":"audio/mpeg"}}'
-            ']}',
+          return http.Response.bytes(
+            utf8.encode(
+              '{"value":['
+              '{"id":"b","name":"বাংলা.mp3","file":{"mimeType":"audio/mpeg"}}'
+              ']}',
+            ),
             200,
           );
         }),
