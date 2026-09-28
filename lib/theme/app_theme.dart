@@ -50,6 +50,17 @@ ThemeData buildPetalThemeData(AppColors c, Brightness brightness) {
     'Petal Gujarati',
     'Petal Gurmukhi',
     'Petal Kannada',
+    // The packaged families above cover common scripts offline. Allow the
+    // operating system's Noto families to supply additional scripts without
+    // forcing all users to download a very large universal font collection.
+    'Noto Sans Sinhala',
+    'Noto Sans Myanmar',
+    'Noto Sans Khmer',
+    'Noto Sans Georgian',
+    'Noto Sans Armenian',
+    'Noto Sans Ethiopic',
+    'Noto Sans Lao',
+    'Noto Sans CJK KR',
     // Native CJK families cover the five target OSes without adding a 19 MB
     // font collection to every Petal installer.
     'Noto Sans CJK SC',
