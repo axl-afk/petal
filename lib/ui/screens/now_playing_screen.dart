@@ -22,7 +22,7 @@ import '../widgets/group_playback_sheet.dart';
 import '../widgets/swipe_down_to_dismiss.dart';
 import '../widgets/track_art.dart';
 
-enum _PlayerPanel { lyrics, queue }
+enum _PlayerPanel { artwork, lyrics, queue }
 
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
@@ -32,7 +32,7 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
-  _PlayerPanel _panel = _PlayerPanel.lyrics;
+  _PlayerPanel _panel = _PlayerPanel.artwork;
 
   @override
   Widget build(BuildContext context) {
@@ -249,11 +249,15 @@ class _DesktopPlayer extends StatelessWidget {
                         Icon(Icons.lyrics_rounded, color: petal.colors.accent, size: 28),
                         const SizedBox(width: 10),
                         Text(
-                          panel == _PlayerPanel.lyrics ? 'Lyrics' : 'Up next',
+                          panel == _PlayerPanel.queue ? 'Up next' : 'Lyrics',
                           style: petal.text.sectionTitle.copyWith(fontSize: 22),
                         ),
                         const Spacer(),
-                        _PanelSelector(selected: panel, onChanged: onPanelChanged, compact: true),
+                        _PanelSelector(
+                          selected: panel == _PlayerPanel.artwork ? _PlayerPanel.lyrics : panel,
+                          onChanged: onPanelChanged,
+                          compact: true,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -261,7 +265,7 @@ class _DesktopPlayer extends StatelessWidget {
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 280),
                         switchInCurve: Curves.easeOutBack,
-                        child: panel == _PlayerPanel.lyrics
+                        child: panel != _PlayerPanel.queue
                             ? _InlineLyrics(
                                 key: const ValueKey('desktop-lyrics'),
                                 track: track,
@@ -363,37 +367,53 @@ class _CompactPlayer extends StatelessWidget {
           190.0,
           math.min(constraints.maxWidth - 56, constraints.maxHeight * .46),
         ).toDouble();
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
+        return Column(
           children: [
-            _SpringReveal(
-              child: Center(
-                child: _SwipeableArtwork(track: track, controller: controller, size: artSize),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                child: panel == _PlayerPanel.artwork
+                    ? Center(
+                        key: const ValueKey('artwork'),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: _SwipeableArtwork(
+                            track: track,
+                            controller: controller,
+                            size: artSize,
+                          ),
+                        ),
+                      )
+                    : Padding(
+                        key: ValueKey(panel),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: _PlayerPanelBody(
+                          panel: panel,
+                          track: track,
+                          playback: playback,
+                          controller: controller,
+                        ),
+                      ),
               ),
             ),
-            const SizedBox(height: 20),
-            GlassSurface(
-              borderRadius: BorderRadius.circular(26),
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: Column(
-                children: [
-                  _TrackDetails(track: track),
-                  const SizedBox(height: 12),
-                  _Transport(playback: playback, controller: controller),
-                ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+              child: GlassSurface(
+                borderRadius: BorderRadius.circular(26),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  children: [
+                    _TrackDetails(track: track),
+                    const SizedBox(height: 8),
+                    _Transport(playback: playback, controller: controller),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 24),
-            _PanelSelector(selected: panel, onChanged: onPanelChanged),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 360,
-              child: _PlayerPanelBody(
-                panel: panel,
-                track: track,
-                playback: playback,
-                controller: controller,
-              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: _PanelSelector(selected: panel, onChanged: onPanelChanged),
             ),
           ],
         );
@@ -674,6 +694,7 @@ class _PanelSelector extends StatelessWidget {
               ButtonSegment(value: _PlayerPanel.queue, icon: Icon(Icons.queue_music_rounded)),
             ]
           : const [
+              ButtonSegment(value: _PlayerPanel.artwork, icon: Icon(Icons.album_outlined), label: Text('Player')),
               ButtonSegment(value: _PlayerPanel.lyrics, icon: Icon(Icons.lyrics_outlined), label: Text('Lyrics')),
               ButtonSegment(value: _PlayerPanel.queue, icon: Icon(Icons.queue_music_rounded), label: Text('Up next')),
             ],
