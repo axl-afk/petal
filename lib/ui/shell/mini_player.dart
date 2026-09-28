@@ -30,12 +30,12 @@ class MiniPlayer extends ConsumerWidget {
     final veryNarrow = width < 430;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 0 : 22, 0, compact ? 0 : 22, 10),
+      padding: EdgeInsets.fromLTRB(compact ? 10 : 22, 0, compact ? 10 : 22, 10),
       child: Material(
         color: petal.colors.surface.withOpacity(.94),
-        elevation: compact ? 0 : 8,
+        elevation: 12,
         shadowColor: Colors.black.withOpacity(.22),
-        borderRadius: BorderRadius.circular(compact ? 0 : 24),
+        borderRadius: BorderRadius.circular(24),
         clipBehavior: Clip.antiAlias,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -48,11 +48,11 @@ class MiniPlayer extends ConsumerWidget {
             }
           },
           child: SizedBox(
-            height: (compact ? 84 : 86) * scale,
+            height: (compact ? 72 : 76) * scale,
             child: Row(
               children: [
                 const SizedBox(width: 12),
-                TrackArt(track: track, size: 50 * scale, iconSize: 19),
+                TrackArt(track: track, size: 46 * scale, iconSize: 19),
                 const SizedBox(width: 12),
                 ConstrainedBox(
                   constraints: BoxConstraints(
