@@ -195,6 +195,45 @@ class _DesktopPlayer extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Artwork and controls lead the eye; lyrics or queue remain beside
+          // the player, as in the desktop design reference.
+          Expanded(
+            flex: 5,
+            child: _SpringReveal(
+              child: GlassSurface(
+                borderRadius: BorderRadius.circular(30),
+                padding: const EdgeInsets.fromLTRB(30, 22, 30, 24),
+                tint: petal.colors.surface.withOpacity(.66),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final artSize = math.min(
+                      math.min(constraints.maxWidth * .76, constraints.maxHeight * .50),
+                      470.0,
+                    ).clamp(180.0, 470.0).toDouble();
+                    return SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _SwipeableArtwork(track: track, controller: controller, size: artSize),
+                          const SizedBox(height: 18),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 520),
+                            child: Column(
+                              children: [
+                                _TrackDetails(track: track, centered: true, large: true),
+                                const SizedBox(height: 12),
+                                _Transport(playback: playback, controller: controller, maxWidth: 500, large: true),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 24),
           Expanded(
             flex: 6,
             child: _SpringReveal(
@@ -238,56 +277,6 @@ class _DesktopPlayer extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 24),
-          Expanded(
-            flex: 5,
-            child: _SpringReveal(
-              delay: const Duration(milliseconds: 70),
-              child: GlassSurface(
-                borderRadius: BorderRadius.circular(30),
-                padding: const EdgeInsets.fromLTRB(30, 22, 30, 24),
-                tint: petal.colors.surface.withOpacity(.66),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final artSize = math.min(
-                      math.min(constraints.maxWidth * .76, constraints.maxHeight * .50),
-                      470.0,
-                    ).clamp(250.0, 470.0).toDouble();
-                    return SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          Align(
-                            alignment: Alignment.topCenter,
-                            child: _SwipeableArtwork(
-                              track: track,
-                              controller: controller,
-                              size: artSize,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 520),
-                            child: Column(
-                              children: [
-                                _TrackDetails(track: track, centered: true, large: true),
-                                const SizedBox(height: 12),
-                                _Transport(
-                                  playback: playback,
-                                  controller: controller,
-                                  maxWidth: 500,
-                                  large: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
                 ),
               ),
             ),
