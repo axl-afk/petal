@@ -663,9 +663,6 @@ class LibraryController extends StateNotifier<LibraryState> {
     var imported = 0;
     for (final file in files) {
       final fileLink = 'https://drive.google.com/file/d/${file.id}/view';
-      final resolvedFile = resolver.resolve(fileLink);
-      if (!resolvedFile.ok || resolvedFile.playableUri == null) continue;
-
       final dot = file.name.lastIndexOf('.');
       final title = dot > 0 ? file.name.substring(0, dot) : file.name;
 
@@ -674,7 +671,10 @@ class LibraryController extends StateNotifier<LibraryState> {
           id: idForCloudSource(fileLink),
           title: title.trim().isEmpty ? 'Untitled Track' : title.trim(),
           sourceType: TrackSourceType.googleDrive,
-          sourceUri: resolvedFile.playableUri!,
+          // The signed-in player's Bearer token authorizes this endpoint;
+          // a public uc?export=download share URL would fail for private files.
+          sourceUri:
+              'https://www.googleapis.com/drive/v3/files/${file.id}?alt=media',
           originUri: fileLink,
           ownerAccount: Value(accountEmail),
         ),

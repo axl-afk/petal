@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:drift/drift.dart' show Value;
 
 import '../data/db/app_database.dart';
 import '../data/db/daos/track_dao.dart';
@@ -417,15 +418,15 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         for (final item in state.queue)
           if (item.id == track.id)
             item.copyWith(
-              lyricsLrc: lines.isEmpty ? null : value,
-              lyricsPlain: lines.isEmpty ? value : null,
+              lyricsLrc: Value(lines.isEmpty ? null : value),
+              lyricsPlain: Value(lines.isEmpty ? value : null),
             )
           else
             item,
       ],
       current: track.copyWith(
-        lyricsLrc: lines.isEmpty ? null : value,
-        lyricsPlain: lines.isEmpty ? value : null,
+        lyricsLrc: Value(lines.isEmpty ? null : value),
+        lyricsPlain: Value(lines.isEmpty ? value : null),
       ),
     );
   }

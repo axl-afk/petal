@@ -76,8 +76,9 @@ void main() {
     () async {
       final service = LyricsService(
         client: MockClient((request) async {
-          if (request.url.path.endsWith('/get'))
+          if (request.url.path.endsWith('/get')) {
             return http.Response('{}', 404);
+          }
           return http.Response(
             jsonEncode([
               {
