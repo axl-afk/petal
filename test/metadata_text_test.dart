@@ -32,6 +32,13 @@ void main() {
     }
   });
 
+  test('repairs accented Latin and emoji without harming original text', () {
+    for (final original in ['Beyoncé', 'Été', 'Dance 🎵']) {
+      expect(cleanMetadataText(latin1.decode(utf8.encode(original))), original);
+      expect(cleanMetadataText(original), original);
+    }
+  });
+
   test('removes null padding used by legacy ID3 fields', () {
     expect(cleanMetadataText('Wishes\u0000\u0000'), 'Wishes');
   });
