@@ -195,6 +195,7 @@ class _TrackRowState extends State<_TrackRow> {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: widget.isCurrent ? widget.onOpenNowPlaying : widget.onPlay,
+          onLongPress: compact ? widget.onAddToPlaylist : null,
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: compact ? 16 : 14,
@@ -279,7 +280,59 @@ class _TrackRowState extends State<_TrackRow> {
                     ),
                   ),
                 ],
-                SizedBox(
+                if (compact)
+                  SizedBox(
+                    width: 44,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Song options',
+                      icon: Icon(
+                        track.isFavorite
+                            ? Icons.favorite_rounded
+                            : Icons.more_vert_rounded,
+                        color: track.isFavorite
+                            ? petal.colors.favorite
+                            : petal.colors.ink2,
+                      ),
+                      onSelected: (action) {
+                        switch (action) {
+                          case 'playlist':
+                            widget.onAddToPlaylist();
+                            break;
+                          case 'favorite':
+                            widget.onToggleFavorite();
+                            break;
+                          case 'download':
+                            widget.onDownload();
+                            break;
+                          case 'remove-download':
+                            widget.onRemoveDownload();
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'playlist',
+                          child: Text('Add to playlist'),
+                        ),
+                        PopupMenuItem(
+                          value: 'favorite',
+                          child: Text(track.isFavorite
+                              ? 'Remove from favorites'
+                              : 'Add to favorites'),
+                        ),
+                        if (track.sourceType != TrackSourceType.local)
+                          PopupMenuItem(
+                            value: track.downloadedPath != null
+                                ? 'remove-download'
+                                : 'download',
+                            child: Text(track.downloadedPath != null
+                                ? 'Remove download'
+                                : 'Download'),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (!compact) SizedBox(
                   width: 36,
                   child: IconButton(
                     tooltip: 'Add to playlist',
@@ -289,7 +342,7 @@ class _TrackRowState extends State<_TrackRow> {
                     onPressed: widget.onAddToPlaylist,
                   ),
                 ),
-                SizedBox(
+                if (!compact) SizedBox(
                   width: 34,
                   child: IconButton(
                     tooltip: track.isFavorite
@@ -306,7 +359,7 @@ class _TrackRowState extends State<_TrackRow> {
                     onPressed: widget.onToggleFavorite,
                   ),
                 ),
-                if (track.sourceType != TrackSourceType.local)
+                if (!compact && track.sourceType != TrackSourceType.local)
                   SizedBox(
                     width: 36,
                     child: _DownloadButton(

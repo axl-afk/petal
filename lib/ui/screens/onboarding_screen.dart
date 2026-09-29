@@ -265,7 +265,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           const _InfoLine(
             icon: Icons.playlist_add_rounded,
-            text: 'Use the playlist button beside a song to add it to an existing or new playlist; the heart saves a favorite.',
+            text: 'Open a song’s menu to add it to a playlist or save it as a favorite. You can also long-press a song to add it to a playlist.',
           ),
           const _InfoLine(
             icon: Icons.lyrics_outlined,

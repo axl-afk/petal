@@ -56,8 +56,64 @@ class MiniPlayer extends ConsumerWidget {
                   }
                 },
                 child: SizedBox(
-                  height: (compact ? 72 : 76) * scale,
-                  child: Row(
+                  height: (compact ? 82 : 76) * scale,
+                  child: compact
+                      ? Column(
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 12),
+                                  TrackArt(
+                                    track: track,
+                                    size: 48 * scale,
+                                    iconSize: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          track.displayTitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: petal.text.miniTitle,
+                                        ),
+                                        Text(
+                                          track.displayArtist,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: petal.text.miniArtist,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  _MiniPlayPause(
+                                    playing: playback.isPlaying,
+                                    buffering: playback.isBuffering,
+                                    onTap: controller.togglePlayPause,
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Next',
+                                    icon: const Icon(Icons.skip_next_rounded),
+                                    onPressed: controller.next,
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: _CompactTimeline(
+                                fallbackDuration: track.duration,
+                                controller: controller,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
                     children: [
                       const SizedBox(width: 12),
                       TrackArt(track: track, size: 46 * scale, iconSize: 19),
@@ -221,6 +277,68 @@ class _MiniTimeline extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// A full-width seek strip below the mobile controls. Keeping it on a
+/// separate row prevents the slider thumb from being squeezed offscreen by
+/// the title and transport buttons on narrow phones.
+class _CompactTimeline extends StatelessWidget {
+  final Duration fallbackDuration;
+  final PlaybackController controller;
+
+  const _CompactTimeline({
+    required this.fallbackDuration,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return StreamBuilder<Duration?>(
+      stream: controller.player.durationStream,
+      builder: (context, durationSnapshot) => StreamBuilder<Duration>(
+        stream: controller.player.positionStream,
+        builder: (context, positionSnapshot) {
+          final totalMs = math.max(
+            1,
+            (durationSnapshot.data ?? fallbackDuration).inMilliseconds,
+          );
+          final progress = (positionSnapshot.data ?? Duration.zero)
+              .inMilliseconds
+              .clamp(0, totalMs) /
+              totalMs;
+          return LayoutBuilder(
+            builder: (context, constraints) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) => _seek(details.localPosition.dx, constraints.maxWidth, totalMs),
+              onHorizontalDragUpdate: (details) =>
+                  _seek(details.localPosition.dx, constraints.maxWidth, totalMs),
+              child: SizedBox(
+                height: 18,
+                child: Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
+                      value: progress.toDouble(),
+                      backgroundColor: petal.colors.ink3.withOpacity(.28),
+                      valueColor: AlwaysStoppedAnimation<Color>(petal.colors.accent),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _seek(double dx, double width, int totalMs) {
+    if (width <= 0) return;
+    final fraction = (dx / width).clamp(0.0, 1.0);
+    controller.seek(Duration(milliseconds: (totalMs * fraction).round()));
   }
 }
 
