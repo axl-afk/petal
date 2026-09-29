@@ -5,36 +5,29 @@
 /// import does — Google and Microsoft both require *you* (the app's owner)
 /// to register the app in your own developer console and get back a client
 /// ID that's tied to your bundle ID / package name / redirect URI. There is
-/// no working credential Claude could have filled in here on your behalf.
+/// no working credential can be filled in on someone else's behalf.
 ///
 /// To make sign-in actually work:
 ///
 /// GOOGLE:
-///   1. https://console.cloud.google.com/ → new project → APIs & Services →
-///      Credentials → Create OAuth client ID.
-///   2. Create one client per platform you ship (Android needs your SHA-1
-///      signing fingerprint, iOS needs your bundle ID, Web needs your
-///      deployed origin).
-///   3. Android/iOS: follow the google_sign_in package's platform setup
-///      (google-services.json / GoogleService-Info.plist, or the
-///      `serverClientId` param) — no client ID needs pasting here for
-///      those two platforms.
-///   4. Web/desktop: paste your Web client ID into [googleWebClientId] below.
+///   Create a Web OAuth client and pass its ID as PETAL_GOOGLE_CLIENT_ID.
+///   Android also needs an Android OAuth client with package + signing SHA-1.
+///   iOS/macOS need their own OAuth clients and Info.plist configuration.
+///   The google_sign_in plugin does not implement Windows/Linux.
 ///
 /// MICROSOFT:
-///   1. https://portal.azure.com/ → Azure Active Directory → App
-///      registrations → New registration.
-///   2. Add a "Mobile and desktop applications" / "Web" redirect URI
-///      matching [microsoftRedirectUri] below (change the placeholder to
-///      match your own registered app, e.g. `msauth.com.yourcompany.petal://auth`
-///      on mobile, or a custom scheme on desktop).
-///   3. Paste the Application (client) ID into [microsoftClientId].
+///   Register `petalauth://auth` under Mobile and desktop applications
+///   for native builds, and the exact origin/path `/auth.html` under
+///   Single-page application for each web deployment. Pass the Application
+///   (client) ID as PETAL_MICROSOFT_CLIENT_ID. No client secret belongs in
+///   this app. See the README's Sign-in setup section for full instructions.
 ///
 /// Until you do this, the sign-in buttons will surface a clear error
 /// instead of silently pretending to work.
 library;
 
 class AuthConfig {
+  // Shared Web client ID for browser sign-in and Android serverClientId.
   static const googleWebClientId = String.fromEnvironment(
     'PETAL_GOOGLE_CLIENT_ID',
     defaultValue: 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com',

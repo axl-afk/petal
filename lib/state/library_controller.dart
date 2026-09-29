@@ -217,6 +217,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(artist: artist),
+      searchQuery: '',
     );
   }
 
@@ -225,6 +226,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(genre: genre),
+      searchQuery: '',
     );
   }
 
@@ -233,6 +235,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(album: album),
+      searchQuery: '',
     );
   }
 
@@ -241,6 +244,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(
       tab: LibraryTab.songs,
       filter: LibraryFilter(playlistId: id, playlistName: name),
+      searchQuery: '',
     );
   }
 
@@ -405,6 +409,8 @@ class LibraryController extends StateNotifier<LibraryState> {
             sourceUri: imported.storedPath,
             originUri: path,
             artworkUrl: Value(imported.artworkPath),
+            lyricsLrc: Value(imported.lyricsLrc),
+            lyricsPlain: Value(imported.lyricsPlain),
           ),
         );
       } catch (_) {
@@ -419,7 +425,7 @@ class LibraryController extends StateNotifier<LibraryState> {
   /// Scans the connected provider account and merges every supported audio
   /// item into the unified library. Provider item IDs make repeat scans
   /// idempotent; user state such as favorites and lyrics survives refreshes.
-  Future<ImportResult> scanConnectedCloud() async {
+  Future<ImportResult> scanConnectedCloud({String? oneDriveFolderPath}) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null)
       throw StateError('Sign in with Google or Microsoft first.');
@@ -435,7 +441,10 @@ class LibraryController extends StateNotifier<LibraryState> {
       };
       final items = switch (session.provider) {
         AuthProviderKind.google => await _scanGoogle(onProgress),
-        AuthProviderKind.microsoft => await _scanMicrosoft(onProgress),
+        AuthProviderKind.microsoft =>
+          oneDriveFolderPath == null
+              ? await _scanMicrosoft(onProgress)
+              : await _scanMicrosoftFolder(oneDriveFolderPath, onProgress),
       };
 
       final rows = items
@@ -497,6 +506,16 @@ class LibraryController extends StateNotifier<LibraryState> {
       throw StateError('Microsoft access expired. Sign out and sign in again.');
     }
     return cloudLibrary.scanOneDrive(token, onProgress: onProgress);
+  }
+
+  Future<List<CloudAudioItem>> _scanMicrosoftFolder(
+    String path,
+    void Function(int) onProgress,
+  ) async {
+    final token = await microsoftAuth.accessToken();
+    if (token == null)
+      throw StateError('Microsoft access expired. Sign in again.');
+    return cloudLibrary.scanOneDriveFolder(token, path, onProgress: onProgress);
   }
 
   /// Resolves a pasted Drive/OneDrive/direct link and, on success, adds it
@@ -594,7 +613,7 @@ class LibraryController extends StateNotifier<LibraryState> {
     return resolved;
   }
 
-  /// Imports every audio file directly inside a Google Drive folder (see
+  /// Imports supported audio files inside a Google Drive folder (see
   /// LinkResolverService.driveFolderId for how a folder link is told apart
   /// from a single-file link). Unlike a single file, listing a folder's
   /// contents needs a real Drive API call — which needs a token, which
@@ -636,8 +655,7 @@ class LibraryController extends StateNotifier<LibraryState> {
 
     if (files.isEmpty) {
       return ResolvedSource.failure(
-        "Didn't find any audio files directly inside that folder (subfolders aren't scanned "
-        "yet — move files up a level, or share the specific subfolder instead).",
+        "Didn't find any supported audio files inside that folder or its subfolders.",
         provider: LinkProviderKind.googleDrive,
       );
     }
@@ -645,9 +663,6 @@ class LibraryController extends StateNotifier<LibraryState> {
     var imported = 0;
     for (final file in files) {
       final fileLink = 'https://drive.google.com/file/d/${file.id}/view';
-      final resolvedFile = resolver.resolve(fileLink);
-      if (!resolvedFile.ok || resolvedFile.playableUri == null) continue;
-
       final dot = file.name.lastIndexOf('.');
       final title = dot > 0 ? file.name.substring(0, dot) : file.name;
 
@@ -656,7 +671,10 @@ class LibraryController extends StateNotifier<LibraryState> {
           id: idForCloudSource(fileLink),
           title: title.trim().isEmpty ? 'Untitled Track' : title.trim(),
           sourceType: TrackSourceType.googleDrive,
-          sourceUri: resolvedFile.playableUri!,
+          // The signed-in player's Bearer token authorizes this endpoint;
+          // a public uc?export=download share URL would fail for private files.
+          sourceUri:
+              'https://www.googleapis.com/drive/v3/files/${file.id}?alt=media',
           originUri: fileLink,
           ownerAccount: Value(accountEmail),
         ),

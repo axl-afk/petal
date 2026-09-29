@@ -13,6 +13,7 @@ import 'track_art_local.dart';
 /// fails to load (a moved/deleted local artwork file, a broken remote URL).
 class TrackArt extends StatelessWidget {
   final Track? track;
+  final String? artworkUrl;
   final double size;
   final double iconSize;
   final BorderRadius? borderRadius;
@@ -20,6 +21,7 @@ class TrackArt extends StatelessWidget {
   const TrackArt({
     super.key,
     required this.track,
+    this.artworkUrl,
     required this.size,
     this.iconSize = 18,
     this.borderRadius,
@@ -29,14 +31,18 @@ class TrackArt extends StatelessWidget {
   Widget build(BuildContext context) {
     final petal = context.petal;
     final radius = borderRadius ?? BorderRadius.circular(8);
-    final url = track?.artworkUrl;
+    final url = artworkUrl ?? track?.artworkUrl;
+    final decodeWidth = (size * MediaQuery.devicePixelRatioOf(context)).ceil();
 
     Widget placeholder() => Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(color: petal.colors.surface2, borderRadius: radius),
-          child: Icon(Icons.music_note, size: iconSize, color: petal.colors.ink3),
-        );
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: petal.colors.surface2,
+        borderRadius: radius,
+      ),
+      child: Icon(Icons.music_note, size: iconSize, color: petal.colors.ink3),
+    );
 
     if (url == null || url.isEmpty) return placeholder();
 
@@ -48,6 +54,7 @@ class TrackArt extends StatelessWidget {
           url,
           width: size,
           height: size,
+          cacheWidth: decodeWidth,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => placeholder(),
         ),
@@ -58,24 +65,33 @@ class TrackArt extends StatelessWidget {
       return _ContentArtwork(
         uri: url,
         size: size,
+        decodeWidth: decodeWidth,
         radius: radius,
         placeholder: placeholder,
       );
     }
 
-    return buildLocalTrackArt(path: url, size: size, radius: radius, placeholder: placeholder);
+    return buildLocalTrackArt(
+      path: url,
+      size: size,
+      decodeWidth: decodeWidth,
+      radius: radius,
+      placeholder: placeholder,
+    );
   }
 }
 
 class _ContentArtwork extends StatefulWidget {
   final String uri;
   final double size;
+  final int decodeWidth;
   final BorderRadius radius;
   final Widget Function() placeholder;
 
   const _ContentArtwork({
     required this.uri,
     required this.size,
+    required this.decodeWidth,
     required this.radius,
     required this.placeholder,
   });
@@ -114,6 +130,7 @@ class _ContentArtworkState extends State<_ContentArtwork> {
             bytes,
             width: widget.size,
             height: widget.size,
+            cacheWidth: widget.decodeWidth,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => widget.placeholder(),
           ),

@@ -8,6 +8,7 @@ import '../../state/nav_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/ui_scale.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/glass_surface.dart';
 
 class TopBar extends ConsumerWidget implements PreferredSizeWidget {
   final bool isMobile;
@@ -41,25 +42,38 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
     );
 
     final search = SizedBox(
-      width: isMobile ? double.infinity : 240,
-      height: 36,
-      child: TextField(
-        onChanged: (q) {
-          ref.read(currentSectionProvider.notifier).state = AppSection.library;
-          ref.read(libraryControllerProvider.notifier).setSearchQuery(q);
-        },
-        style: TextStyle(fontSize: 13.5, color: petal.colors.ink),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: l10n.searchLibrary,
-          hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13.5),
-          prefixIcon: Icon(Icons.search, size: 18, color: petal.colors.ink3),
-          filled: true,
-          fillColor: petal.colors.surface2,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
+      width: isMobile ? double.infinity : 320,
+      height: 42,
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(24),
+        blur: 12,
+        child: TextField(
+          key: ValueKey(section == AppSection.search),
+          autofocus: section == AppSection.search,
+          onTap: () {
+            if (section != AppSection.search) {
+              ref
+                  .read(libraryControllerProvider.notifier)
+                  .setTab(LibraryTab.songs);
+              ref.read(currentSectionProvider.notifier).state =
+                  AppSection.search;
+            }
+          },
+          onChanged: (q) {
+            ref.read(libraryControllerProvider.notifier).setSearchQuery(q);
+          },
+          style: TextStyle(fontSize: 13.5, color: petal.colors.ink),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: l10n.searchLibrary,
+            hintStyle: TextStyle(color: petal.colors.ink3, fontSize: 13.5),
+            prefixIcon: Icon(Icons.search, size: 18, color: petal.colors.ink3),
+            filled: false,
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(24),
+              borderSide: BorderSide.none,
+            ),
           ),
         ),
       ),
@@ -95,8 +109,10 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
       ],
     );
 
-    final container = Container(
-      color: petal.colors.surface.withOpacity(0.72),
+    final container = GlassSurface(
+      borderRadius: BorderRadius.zero,
+      blur: 12,
+      tint: petal.colors.surface.withOpacity(.24),
       padding: EdgeInsets.symmetric(
         horizontal: isMobile ? 14 : 24,
         vertical: isMobile ? 10 : 0,
@@ -135,23 +151,22 @@ class TopBar extends ConsumerWidget implements PreferredSizeWidget {
                             ),
                           )
                           .toList(),
-                      child: Container(
-                        height: 36,
+                      child: GlassSurface(
+                        borderRadius: BorderRadius.circular(18),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: petal.colors.surface2,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _labelFor(context, libraryState.tab),
-                              style: petal.text.tabLabelActive,
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.expand_more, size: 17),
-                          ],
+                        child: SizedBox(
+                          height: 36,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _labelFor(context, libraryState.tab),
+                                style: petal.text.tabLabelActive,
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.expand_more, size: 17),
+                            ],
+                          ),
                         ),
                       ),
                     ),

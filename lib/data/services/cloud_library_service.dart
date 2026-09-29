@@ -41,7 +41,8 @@ class CloudLibraryService {
           .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
           .timeout(const Duration(seconds: 30));
       _requireSuccess(response, 'Google Drive');
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       for (final raw in (body['files'] as List<dynamic>? ?? const [])) {
         final file = raw as Map<String, dynamic>;
         final id = file['id'] as String?;
@@ -85,7 +86,8 @@ class CloudLibraryService {
           .get(next, headers: {'Authorization': 'Bearer $accessToken'})
           .timeout(const Duration(seconds: 30));
       _requireSuccess(response, 'OneDrive');
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       for (final raw in (body['value'] as List<dynamic>? ?? const [])) {
         final file = raw as Map<String, dynamic>;
         if (file['deleted'] != null || file['folder'] != null) continue;
@@ -120,6 +122,94 @@ class CloudLibraryService {
       }
       final nextLink = body['@odata.nextLink'] as String?;
       next = nextLink == null ? null : Uri.tryParse(nextLink);
+    }
+    return items;
+  }
+
+  /// Imports only the named OneDrive folder (and its descendants). The path
+  /// is relative to the signed-in user's Drive root, for example Music/Jazz.
+  Future<List<CloudAudioItem>> scanOneDriveFolder(
+    String accessToken,
+    String folderPath, {
+    void Function(int discovered)? onProgress,
+  }) async {
+    final segments = folderPath
+        .split('/')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (segments.isEmpty || segments.any((s) => s == '.' || s == '..')) {
+      throw const CloudLibraryException(
+        'Enter a OneDrive folder path such as Music/Jazz.',
+      );
+    }
+    final encoded = segments.map(Uri.encodeComponent).join('/');
+    final pending = <Uri>[
+      Uri.parse(
+        'https://graph.microsoft.com/v1.0/me/drive/root:/$encoded:/children',
+      ),
+    ];
+    final items = <CloudAudioItem>[];
+    var folders = 0;
+    while (pending.isNotEmpty) {
+      Uri? page = pending.removeLast();
+      if (++folders > 500) {
+        throw const CloudLibraryException(
+          'This folder contains more than 500 pages or subfolders. Choose a smaller folder.',
+        );
+      }
+      while (page != null) {
+        final response = await _client
+            .get(page, headers: {'Authorization': 'Bearer $accessToken'})
+            .timeout(const Duration(seconds: 30));
+        _requireSuccess(response, 'OneDrive folder');
+        final body =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        for (final raw in (body['value'] as List<dynamic>? ?? const [])) {
+          final file = raw as Map<String, dynamic>;
+          final id = file['id'] as String?;
+          final name = file['name'] as String?;
+          if (id == null || name == null || file['deleted'] != null) continue;
+          final itemPath =
+              'https://graph.microsoft.com/v1.0/me/drive/items/${Uri.encodeComponent(id)}';
+          if (file['folder'] != null) {
+            pending.add(Uri.parse('$itemPath/children'));
+            continue;
+          }
+          final fileFacet = file['file'] as Map<String, dynamic>?;
+          final mime = fileFacet?['mimeType'] as String?;
+          if (!_looksLikeAudio(name, mime)) continue;
+          final audio = file['audio'] as Map<String, dynamic>?;
+          items.add(
+            CloudAudioItem(
+              provider: TrackSourceType.oneDrive,
+              providerItemId: id,
+              name: name,
+              streamUri: '$itemPath/content',
+              mimeType: mime,
+              sizeBytes: (file['size'] as num?)?.toInt(),
+              modifiedAt: DateTime.tryParse(
+                file['lastModifiedDateTime']?.toString() ?? '',
+              ),
+              metadataTitle: audio?['title'] as String?,
+              artist: (audio?['artist'] ?? audio?['albumArtist']) as String?,
+              album: audio?['album'] as String?,
+              genre: audio?['genre'] as String?,
+              durationMs: (audio?['duration'] as num?)?.toInt(),
+              artworkUrl: _oneDriveThumbnail(file),
+            ),
+          );
+          onProgress?.call(items.length);
+        }
+        final link = body['@odata.nextLink'] as String?;
+        page = link == null ? null : Uri.tryParse(link);
+        if (page != null &&
+            (page.scheme != 'https' || page.host != 'graph.microsoft.com')) {
+          throw const CloudLibraryException(
+            'OneDrive returned an invalid continuation link.',
+          );
+        }
+      }
     }
     return items;
   }

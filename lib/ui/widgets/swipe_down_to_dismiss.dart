@@ -31,35 +31,36 @@ class _SwipeDownToDismissState extends State<SwipeDownToDismiss> with SingleTick
 
   late final AnimationController _snapController;
   Animation<double> _snapAnimation = const AlwaysStoppedAnimation(0);
-  double _dragExtent = 0;
+  final ValueNotifier<double> _dragExtent = ValueNotifier<double>(0);
 
   @override
   void initState() {
     super.initState();
     _snapController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200))
-      ..addListener(() => setState(() => _dragExtent = _snapAnimation.value));
+      ..addListener(() => _dragExtent.value = _snapAnimation.value);
   }
 
   @override
   void dispose() {
     _snapController.dispose();
+    _dragExtent.dispose();
     super.dispose();
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
     if (_snapController.isAnimating) return;
-    setState(() => _dragExtent = (_dragExtent + details.delta.dy).clamp(0.0, _dragCap));
+    _dragExtent.value = (_dragExtent.value + details.delta.dy).clamp(0.0, _dragCap);
   }
 
   void _onDragEnd(DragEndDetails details) {
-    if (_dragExtent >= _dismissDistance) {
+    if (_dragExtent.value >= _dismissDistance) {
       widget.onDismiss();
       // The section switch this triggers normally unmounts this widget —
       // reset defensively in case a caller ever reuses it without that.
-      setState(() => _dragExtent = 0);
+      _dragExtent.value = 0;
       return;
     }
-    _snapAnimation = Tween<double>(begin: _dragExtent, end: 0).animate(
+    _snapAnimation = Tween<double>(begin: _dragExtent.value, end: 0).animate(
       CurvedAnimation(parent: _snapController, curve: Curves.easeOut),
     );
     _snapController.forward(from: 0);
@@ -67,15 +68,18 @@ class _SwipeDownToDismissState extends State<SwipeDownToDismiss> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    final progress = (_dragExtent / _dragCap).clamp(0.0, 1.0);
     return GestureDetector(
       onVerticalDragUpdate: _onDragUpdate,
       onVerticalDragEnd: _onDragEnd,
-      child: Transform.translate(
-        offset: Offset(0, _dragExtent),
-        child: Opacity(
-          opacity: 1 - progress * 0.4,
-          child: widget.child,
+      child: ValueListenableBuilder<double>(
+        valueListenable: _dragExtent,
+        child: widget.child,
+        builder: (context, extent, child) => Transform.translate(
+          offset: Offset(0, extent),
+          child: Opacity(
+            opacity: 1 - (extent / _dragCap).clamp(0.0, 1.0) * .4,
+            child: child,
+          ),
         ),
       ),
     );

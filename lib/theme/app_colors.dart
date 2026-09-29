@@ -17,6 +17,7 @@ class AppColors {
   final Color hairline2;
   final Color
   good; // the one remaining "colored" token: the connected-source status dot
+  final Color favorite;
 
   const AppColors({
     required this.ground,
@@ -30,20 +31,22 @@ class AppColors {
     required this.hairline,
     required this.hairline2,
     required this.good,
+    required this.favorite,
   });
 
   static const dark = AppColors(
-    ground: Color(0xFF080910),
-    surface: Color(0xFF171923),
-    surface2: Color(0xFF222532),
+    ground: Color(0xFF0B0B0D),
+    surface: Color(0xFF19191C),
+    surface2: Color(0xFF28282C),
     ink: Color(0xFFF5F5F7),
     ink2: Color(0xA3F5F5F7), // 64%
     ink3: Color(0x66F5F5F7), // 40%
-    accent: Color(0xFFB8C8FF),
-    accentInk: Color(0xFF10131E),
+    accent: Color(0xFFE8ECF4),
+    accentInk: Color(0xFF17181B),
     hairline: Color(0x14FFFFFF),
     hairline2: Color(0x24FFFFFF),
     good: Color(0xFF34C77B),
+    favorite: Color(0xFFFF375F),
   );
 
   static const light = AppColors(
@@ -58,5 +61,6 @@ class AppColors {
     hairline: Color(0x14000000),
     hairline2: Color(0x24000000),
     good: Color(0xFF1F9D57),
+    favorite: Color(0xFFD91740),
   );
 }

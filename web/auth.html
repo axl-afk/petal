@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Petal sign-in</title>
+  </head>
+  <body>
+    <p>Finishing sign-in…</p>
+    <script>
+      const message = {'flutter-web-auth-2': window.location.href};
+      if (window.opener) {
+        window.opener.postMessage(message, window.location.origin);
+        window.close();
+      } else if (window.parent && window.parent !== window) {
+        window.parent.postMessage(message, window.location.origin);
+      } else {
+        localStorage.setItem('flutter-web-auth-2', window.location.href);
+        window.close();
+      }
+    </script>
+  </body>
+</html>

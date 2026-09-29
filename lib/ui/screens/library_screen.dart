@@ -1,27 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'dart:convert';
 
 import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../state/playback_controller.dart';
+import '../../state/providers.dart';
 import '../../data/db/daos/track_dao.dart';
+import '../../data/db/app_database.dart';
+import '../../data/models/track_extensions.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/collection_layout.dart';
 import '../widgets/grid_card.dart';
+import '../widgets/glass_surface.dart';
+import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/track_art.dart';
 import '../widgets/track_table.dart';
 
 class LibraryScreen extends ConsumerWidget {
-  const LibraryScreen({super.key});
+  final bool searchMode;
+  const LibraryScreen({super.key, this.searchMode = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(libraryControllerProvider);
 
+    if (searchMode && !state.isSearching) {
+      return const _SearchBrowse();
+    }
+
     if (state.isSearching) {
       return _TrackListSection(
-        eyebrow: 'Search',
+        eyebrow: 'Search your music',
         title: '"${state.searchQuery}"',
-        subtitle: 'Results across your library',
+        subtitle: 'Songs from this device and your connected sources',
       );
     }
     if (state.filter.artist != null) {
@@ -82,6 +95,426 @@ class LibraryScreen extends ConsumerWidget {
   }
 }
 
+final _overviewTracksProvider = StreamProvider.autoDispose<List<Track>>(
+  (ref) => ref.watch(trackDaoProvider).watchRecent(),
+);
+
+/// A real, personalized entry point built entirely from the indexed library.
+/// Collections stay usable offline and never imply a streaming catalog.
+class LibraryOverview extends ConsumerWidget {
+  const LibraryOverview({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final petal = context.petal;
+    final tracks = ref.watch(_overviewTracksProvider);
+    final albums = ref.watch(albumsStreamProvider);
+    final playlists = ref.watch(playlistsStreamProvider);
+
+    void openTab(LibraryTab tab) {
+      ref.read(libraryControllerProvider.notifier).setTab(tab);
+      ref.read(currentSectionProvider.notifier).state = AppSection.library;
+    }
+
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 14),
+          sliver: SliverToBoxAdapter(
+            child: GlassSurface(
+              padding: const EdgeInsets.fromLTRB(26, 22, 26, 24),
+              tint: context.petal.colors.surface.withOpacity(.27),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('YOUR SPACE', style: petal.text.heroEyebrow),
+                  const SizedBox(height: 4),
+                  Text('Listen your way', style: petal.text.heroTitle),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Local and cloud music, together in one library.',
+                    style: petal.text.heroSub,
+                  ),
+                  const SizedBox(height: 22),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _OverviewShortcut(
+                        icon: Icons.favorite_rounded,
+                        title: 'Favorite songs',
+                        onTap: () => openTab(LibraryTab.favorites),
+                      ),
+                      _OverviewShortcut(
+                        icon: Icons.queue_music_rounded,
+                        title: 'Playlists',
+                        onTap: () => openTab(LibraryTab.playlists),
+                      ),
+                      _OverviewShortcut(
+                        icon: Icons.album_rounded,
+                        title: 'Albums',
+                        onTap: () => openTab(LibraryTab.albums),
+                      ),
+                      _OverviewShortcut(
+                        icon: Icons.music_note_rounded,
+                        title: 'All songs',
+                        onTap: () => openTab(LibraryTab.songs),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: albums.when(
+            data: (items) => _OverviewShelf(
+              title: 'Your albums',
+              onSeeAll: () => openTab(LibraryTab.albums),
+              count: items.length > 12 ? 12 : items.length,
+              itemBuilder: (index) {
+                final album = items[index];
+                return GridCard(
+                  icon: Icons.album_outlined,
+                  title: album.album,
+                  subtitle: album.artist,
+                  artworkUrl: album.artworkUrl,
+                  onTap: () {
+                    ref
+                        .read(libraryControllerProvider.notifier)
+                        .filterByAlbum(album.album);
+                    ref.read(currentSectionProvider.notifier).state =
+                        AppSection.library;
+                  },
+                );
+              },
+            ),
+            loading: () => const LinearProgressIndicator(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: playlists.when(
+            data: (items) => _OverviewShelf(
+              title: 'Playlists',
+              onSeeAll: () => openTab(LibraryTab.playlists),
+              count: items.length > 12 ? 12 : items.length,
+              itemBuilder: (index) {
+                final playlist = items[index];
+                return GridCard(
+                  icon: Icons.queue_music_rounded,
+                  title: playlist.name,
+                  subtitle: 'Your playlist',
+                  imageBytes: playlist.artworkData == null
+                      ? null
+                      : base64Decode(playlist.artworkData!),
+                  onTap: () {
+                    ref
+                        .read(libraryControllerProvider.notifier)
+                        .filterByPlaylist(playlist.id, playlist.name);
+                    ref.read(currentSectionProvider.notifier).state =
+                        AppSection.library;
+                  },
+                );
+              },
+            ),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 34),
+          sliver: tracks.when(
+            data: (items) => items.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.library_music_outlined, size: 40),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Your music starts here',
+                              style: petal.text.sectionTitle,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Add files or connect a cloud source to see your music.',
+                              textAlign: TextAlign.center,
+                              style: petal.text.meta,
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton(
+                              onPressed: () =>
+                                  ref
+                                          .read(currentSectionProvider.notifier)
+                                          .state =
+                                      AppSection.addSource,
+                              child: const Text('Add music'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Recently added',
+                                  style: petal.text.sectionTitle,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => openTab(LibraryTab.songs),
+                                child: const Text('See all'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final track = items[index - 1];
+                      return ListTile(
+                        key: ValueKey(track.id),
+                        contentPadding: EdgeInsets.zero,
+                        leading: TrackArt(track: track, size: 48),
+                        title: Text(
+                          track.displayTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          track.displayArtist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Add to playlist',
+                              onPressed: () =>
+                                  AddToPlaylistSheet.show(context, track),
+                              icon: const Icon(Icons.playlist_add_rounded),
+                            ),
+                            IconButton(
+                              tooltip: track.isFavorite
+                                  ? 'Remove from favorites'
+                                  : 'Add to favorites',
+                              icon: Icon(
+                                track.isFavorite
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: track.isFavorite
+                                    ? context.petal.colors.favorite
+                                    : context.petal.colors.ink2,
+                              ),
+                              onPressed: () => ref
+                                  .read(libraryControllerProvider.notifier)
+                                  .toggleFavorite(track),
+                            ),
+                          ],
+                        ),
+                        onTap: () => ref
+                            .read(playbackControllerProvider.notifier)
+                            .playSingle(track, context: items),
+                      );
+                    }, childCount: items.length + 1),
+                  ),
+            loading: () => const SliverToBoxAdapter(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, _) =>
+                SliverToBoxAdapter(child: Text('Could not load music: $error')),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OverviewShortcut extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  const _OverviewShortcut({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GlassSurface(
+    borderRadius: BorderRadius.circular(999),
+    blur: 10,
+    padding: EdgeInsets.zero,
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 17, color: context.petal.colors.accent),
+              const SizedBox(width: 6),
+              Text(title, style: context.petal.text.meta),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _OverviewShelf extends StatelessWidget {
+  final String title;
+  final VoidCallback onSeeAll;
+  final int count;
+  final Widget Function(int) itemBuilder;
+  const _OverviewShelf({
+    required this.title,
+    required this.onSeeAll,
+    required this.count,
+    required this.itemBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (count == 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 0, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 24, bottom: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(title, style: context.petal.text.sectionTitle),
+                ),
+                TextButton(onPressed: onSeeAll, child: const Text('See all')),
+              ],
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = CollectionLayout.shelfWidth(
+                constraints.maxWidth,
+              );
+              return SizedBox(
+                height: cardWidth + MediaQuery.textScalerOf(context).scale(48),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: count,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(width: CollectionLayout.spacing),
+                  itemBuilder: (context, index) =>
+                      SizedBox(width: cardWidth, child: itemBuilder(index)),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchBrowse extends ConsumerWidget {
+  const _SearchBrowse();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final genres = ref.watch(genresStreamProvider);
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 16),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SEARCH', style: context.petal.text.heroEyebrow),
+                Text('Explore your music', style: context.petal.text.heroTitle),
+                const SizedBox(height: 6),
+                Text(
+                  'Search the tracks you imported or connected.',
+                  style: context.petal.text.heroSub,
+                ),
+                const SizedBox(height: 20),
+                Text('Browse by genre', style: context.petal.text.sectionTitle),
+              ],
+            ),
+          ),
+        ),
+        genres.when(
+          data: (items) => items.isEmpty
+              ? const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Your genres will appear after you add music.'),
+                  ),
+                )
+              : SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  sliver: SliverLayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.crossAxisExtent;
+                      final columns = CollectionLayout.columns(width);
+                      final cardWidth = CollectionLayout.cardWidth(width);
+                      return SliverGrid.builder(
+                        itemCount: items.length,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          crossAxisSpacing: CollectionLayout.spacing,
+                          mainAxisSpacing: CollectionLayout.spacing,
+                          childAspectRatio:
+                              cardWidth /
+                              (cardWidth +
+                                  MediaQuery.textScalerOf(context).scale(48)),
+                        ),
+                        itemBuilder: (context, index) {
+                          final genre = items[index];
+                          return GridCard(
+                            icon: Icons.graphic_eq_rounded,
+                            title: genre.genre,
+                            subtitle: '${genre.trackCount} songs',
+                            onTap: () {
+                              ref
+                                  .read(libraryControllerProvider.notifier)
+                                  .filterByGenre(genre.genre);
+                              ref.read(currentSectionProvider.notifier).state =
+                                  AppSection.library;
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+          loading: () => const SliverToBoxAdapter(
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, _) =>
+              SliverToBoxAdapter(child: Text('Could not load genres: $error')),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+      ],
+    );
+  }
+}
+
 class _TrackListSection extends ConsumerWidget {
   final String eyebrow;
   final String title;
@@ -109,9 +542,8 @@ class _TrackListSection extends ConsumerWidget {
               title: title == 'Your Music' ? 'Songs' : title,
               subtitle: subtitle,
               showBack: showBack,
-              onBack: () => ref
-                  .read(libraryControllerProvider.notifier)
-                  .clearFilter(),
+              onBack: () =>
+                  ref.read(libraryControllerProvider.notifier).clearFilter(),
               onPlay: () {
                 final tracks = tracksAsync.value ?? const [];
                 if (tracks.isNotEmpty) {
@@ -312,6 +744,7 @@ class _AlbumsGrid extends ConsumerWidget {
             title: album.album,
             subtitle:
                 '${album.artist} · ${album.trackCount} song${album.trackCount == 1 ? '' : 's'}',
+            artworkUrl: album.artworkUrl,
             onTap: () => ref
                 .read(libraryControllerProvider.notifier)
                 .filterByAlbum(album.album),
@@ -370,19 +803,19 @@ class _Grid extends StatelessWidget {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth < 520
-            ? 2
-            : constraints.maxWidth < 900
-            ? 3
-            : 4;
+        final available = constraints.maxWidth - 40;
+        final columns = CollectionLayout.columns(available);
+        final cardWidth = CollectionLayout.cardWidth(available);
         return Padding(
           padding: const EdgeInsets.all(20),
           child: GridView.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: columns == 2 ? 1.0 : 1.1,
+              crossAxisSpacing: CollectionLayout.spacing,
+              mainAxisSpacing: CollectionLayout.spacing,
+              childAspectRatio:
+                  cardWidth /
+                  (cardWidth + MediaQuery.textScalerOf(context).scale(48)),
             ),
             itemCount: itemCount,
             itemBuilder: itemBuilder,

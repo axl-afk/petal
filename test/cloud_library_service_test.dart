@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -31,11 +33,13 @@ void main() {
 
     test('recovers artist and title from a tag-less cloud filename', () async {
       final service = CloudLibraryService(
-        client: MockClient((_) async => http.Response(
-              '{"files":[{"id":"one","name":"Petal Artist - Night Drive.mp3",'
-              '"mimeType":"audio/mpeg"}]}',
-              200,
-            )),
+        client: MockClient(
+          (_) async => http.Response(
+            '{"files":[{"id":"one","name":"Petal Artist - Night Drive.mp3",'
+            '"mimeType":"audio/mpeg"}]}',
+            200,
+          ),
+        ),
       );
 
       final item = (await service.scanGoogleDrive('token')).single;
@@ -72,6 +76,39 @@ void main() {
       expect(items.single.album, 'Glass');
       expect(items.single.durationMs, 123000);
       expect(items.single.artworkUrl, 'https://img.example/cover.jpg');
+    });
+
+    test('scans only a selected OneDrive folder and descendants', () async {
+      final paths = <String>[];
+      final service = CloudLibraryService(
+        client: MockClient((request) async {
+          paths.add(request.url.path);
+          expect(request.headers['authorization'], 'Bearer token');
+          if (request.url.path.endsWith('/children') && paths.length == 1) {
+            return http.Response.bytes(
+              utf8.encode(
+                '{"value":['
+                '{"id":"sub","name":"Sub","folder":{"childCount":1}},'
+                '{"id":"a","name":"गाना.flac","file":{"mimeType":"audio/flac"}}'
+                ']}',
+              ),
+              200,
+            );
+          }
+          return http.Response.bytes(
+            utf8.encode(
+              '{"value":['
+              '{"id":"b","name":"বাংলা.mp3","file":{"mimeType":"audio/mpeg"}}'
+              ']}',
+            ),
+            200,
+          );
+        }),
+      );
+      final items = await service.scanOneDriveFolder('token', 'Music/Jazz');
+      expect(paths.first, contains('/root:/Music/Jazz:/children'));
+      expect(paths.last, contains('/items/sub/children'));
+      expect(items.map((i) => i.name), ['गाना.flac', 'বাংলা.mp3']);
     });
 
     test('surfaces expired provider access clearly', () async {

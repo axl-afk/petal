@@ -17,7 +17,7 @@ class DriveFolderFile {
   const DriveFolderFile({required this.id, required this.name});
 }
 
-/// Lists the audio files directly inside a Google Drive folder the
+/// Lists audio files within a Google Drive folder the
 /// signed-in account can see, given the folder's id (parsed from a pasted
 /// folder share link — see LinkResolverService.driveFolderId).
 ///
@@ -31,53 +31,80 @@ class DriveFolderFile {
 /// `drive.appdata` scope the library-backup feature uses — a meaningfully
 /// bigger permission grant, flagged in README's sign-in section.
 ///
-/// Doesn't recurse into subfolders (v1 scope — see README).
+/// Includes child folders, with a bound to prevent accidental huge scans.
 class DriveFolderService {
   static const _filesUrl = 'https://www.googleapis.com/drive/v3/files';
 
   final http.Client _client;
   DriveFolderService({http.Client? client}) : _client = client ?? http.Client();
 
-  Future<List<DriveFolderFile>> listAudioFiles(String accessToken, String folderId) async {
+  Future<List<DriveFolderFile>> listAudioFiles(
+    String accessToken,
+    String folderId,
+  ) async {
     final all = <DriveFolderFile>[];
-    String? pageToken;
-
-    do {
-      final uri = Uri.parse(_filesUrl).replace(queryParameters: {
-        'q': "'$folderId' in parents and trashed = false and "
-            "mimeType != 'application/vnd.google-apps.folder'",
-        'fields': 'nextPageToken, files(id, name, mimeType)',
-        'pageSize': '200',
-        if (pageToken != null) 'pageToken': pageToken,
-      });
-
-      final res = await _client
-          .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
-          .timeout(const Duration(seconds: 20));
-
-      if (res.statusCode == 403 || res.statusCode == 404) {
+    final pending = <String>[folderId];
+    final visited = <String>{};
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (!visited.add(current)) continue;
+      if (visited.length > 500) {
         throw DriveFolderException(
-          "Couldn't read that folder — make sure it's actually shared with this Google "
-          "account (Anyone with the link, or shared directly with you), and that Drive "
-          "access wasn't declined during sign-in.",
+          'This folder contains more than 500 subfolders. Choose a smaller folder.',
         );
       }
-      if (res.statusCode != 200) {
-        throw DriveFolderException('Google Drive returned ${res.statusCode} listing that folder.');
-      }
+      String? pageToken;
+      do {
+        final uri = Uri.parse(_filesUrl).replace(
+          queryParameters: {
+            'q': "'$current' in parents and trashed = false",
+            'fields': 'nextPageToken, files(id, name, mimeType)',
+            'pageSize': '200',
+            'supportsAllDrives': 'true',
+            'includeItemsFromAllDrives': 'true',
+            if (pageToken != null) 'pageToken': pageToken,
+          },
+        );
 
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
-      final items = (json['files'] as List<dynamic>?) ?? const [];
-      for (final item in items) {
-        final map = item as Map<String, dynamic>;
-        final id = map['id'] as String?;
-        final name = map['name'] as String?;
-        if (id == null || name == null) continue;
-        final ext = name.contains('.') ? name.substring(name.lastIndexOf('.') + 1).toLowerCase() : '';
-        if (kAudioExtensions.contains(ext)) all.add(DriveFolderFile(id: id, name: name));
-      }
-      pageToken = json['nextPageToken'] as String?;
-    } while (pageToken != null);
+        final res = await _client
+            .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
+            .timeout(const Duration(seconds: 20));
+
+        if (res.statusCode == 403 || res.statusCode == 404) {
+          throw DriveFolderException(
+            "Couldn't read that folder — make sure it's actually shared with this Google "
+            "account (Anyone with the link, or shared directly with you), and that Drive "
+            "access wasn't declined during sign-in.",
+          );
+        }
+        if (res.statusCode != 200) {
+          throw DriveFolderException(
+            'Google Drive returned ${res.statusCode} listing that folder.',
+          );
+        }
+
+        final json =
+            jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+        final items = (json['files'] as List<dynamic>?) ?? const [];
+        for (final item in items) {
+          final map = item as Map<String, dynamic>;
+          final id = map['id'] as String?;
+          final name = map['name'] as String?;
+          if (id == null || name == null) continue;
+          if (map['mimeType'] == 'application/vnd.google-apps.folder') {
+            pending.add(id);
+            continue;
+          }
+          final ext = name.contains('.')
+              ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
+              : '';
+          if (kAudioExtensions.contains(ext)) {
+            all.add(DriveFolderFile(id: id, name: name));
+          }
+        }
+        pageToken = json['nextPageToken'] as String?;
+      } while (pageToken != null && pageToken.isNotEmpty);
+    }
 
     return all;
   }
@@ -93,13 +120,15 @@ class DriveFolderService {
   /// had rather than blocking the whole "add a source" action over a
   /// cosmetic detail.
   Future<String?> getFileName(String accessToken, String fileId) async {
-    final uri = Uri.parse('$_filesUrl/$fileId').replace(queryParameters: {'fields': 'name'});
+    final uri = Uri.parse('$_filesUrl/$fileId')
+        .replace(queryParameters: {'fields': 'name'});
     try {
       final res = await _client
           .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) return null;
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final json =
+          jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return json['name'] as String?;
     } catch (_) {
       return null;

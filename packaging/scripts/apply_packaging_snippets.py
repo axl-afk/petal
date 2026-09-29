@@ -93,6 +93,7 @@ IOS_USAGE_DESCRIPTIONS = {
 
 PERMISSION_BLOCK = (
     '    <uses-permission android:name="android.permission.INTERNET" />\n'
+    '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n'
     '    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\n'
     '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\n'
     '        android:maxSdkVersion="32" />\n'

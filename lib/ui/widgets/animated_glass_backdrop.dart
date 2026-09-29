@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// Slow, low-contrast liquid shapes that give the glass panes something to
-/// refract. The painter is ignored when the platform requests reduced motion.
+/// A brief ambient entrance for the glass panes. A perpetual full-screen
+/// blur repaint would scale its work with refresh rate (up to 160 frames/s).
+/// The painter settles after the entrance and respects reduced motion.
 class AnimatedGlassBackdrop extends StatefulWidget {
-  const AnimatedGlassBackdrop({super.key});
+  final Color? accent;
+  const AnimatedGlassBackdrop({super.key, this.accent});
 
   @override
   State<AnimatedGlassBackdrop> createState() => _AnimatedGlassBackdropState();
@@ -17,7 +19,7 @@ class _AnimatedGlassBackdropState extends State<AnimatedGlassBackdrop>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 18),
+    duration: const Duration(milliseconds: 1200),
   );
 
   @override
@@ -26,8 +28,8 @@ class _AnimatedGlassBackdropState extends State<AnimatedGlassBackdrop>
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.stop();
       _controller.value = .18;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat();
+    } else if (_controller.status == AnimationStatus.dismissed) {
+      _controller.forward();
     }
   }
 
@@ -47,7 +49,7 @@ class _AnimatedGlassBackdropState extends State<AnimatedGlassBackdrop>
           builder: (context, _) => CustomPaint(
             painter: _DropletPainter(
               phase: _controller.value * math.pi * 2,
-              accent: colors.accent,
+              accent: widget.accent ?? colors.accent,
               surface: colors.surface2,
               dark: Theme.of(context).brightness == Brightness.dark,
             ),
@@ -105,7 +107,7 @@ class _DropletPainter extends CustomPainter {
 
     for (final drop in drops) {
       final paint = Paint()
-        ..color = drop.color.withOpacity(dark ? .12 : .10)
+        ..color = drop.color.withOpacity(dark ? .25 : .16)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, shortest * .06);
       canvas.drawCircle(drop.center, drop.radius, paint);
       canvas.drawCircle(
