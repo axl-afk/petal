@@ -193,11 +193,17 @@ Raw `flutter build` output for macOS/Windows/Linux is a runnable
 folder/`.app`, not a shareable installer. For an actual installer:
 
 - **macOS → .dmg + .pkg**: `bash packaging/macos/build_dmg_pkg.sh` (also
-  runs automatically in CI). Unsigned/unnotarized — fine to share directly
-  or for internal testing; Gatekeeper will warn on other people's Macs
-  until you sign with your own paid Apple Developer ID and notarize via
-  `xcrun notarytool` — that step needs your own certificate and can't be
-  pre-filled here.
+  runs automatically in CI). These are unsigned and unnotarized testing
+  builds. Download the `petal-macos` artifact ZIP, extract it, open
+  `Petal.dmg`, and drag `Petal.app` to Applications. On the first launch,
+  macOS may block it because Apple has not verified the developer. If you
+  trust the build, try opening the installed app once, then go to System
+  Settings → Privacy & Security → Open Anyway. This is a per-app exception;
+  do not disable Gatekeeper globally. If the dialog instead says the app is
+  damaged, or it closes after Open Anyway, collect the exact dialog and
+  crash report; that is a separate problem. A normal one-click release
+  requires a Developer ID certificate and Apple notarization, which need
+  the publisher's Apple Developer account and cannot be supplied by CI.
 - **Windows → installer .exe**: install Inno Setup, then
   `iscc packaging\windows\installer.iss` (also runs in CI). Unsigned —
   triggers a SmartScreen warning until you sign with your own code-signing

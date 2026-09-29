@@ -119,6 +119,22 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: dart run flutter_launcher_icons
       - run: flutter build macos --release
+      - name: Verify and launch macOS bundle
+        run: |
+          set -euo pipefail
+          APP="build/macos/Build/Products/Release/petal.app"
+          test -x "$APP/Contents/MacOS/petal"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          "$APP/Contents/MacOS/petal" > "$RUNNER_TEMP/petal-startup.log" 2>&1 &
+          app_pid=$!
+          sleep 8
+          if ! kill -0 "$app_pid" 2>/dev/null; then
+            cat "$RUNNER_TEMP/petal-startup.log"
+            echo "Petal exited during the launch smoke test" >&2
+            exit 1
+          fi
+          kill "$app_pid" || true
+          wait "$app_pid" || true
       - name: Package .dmg and .pkg
         run: bash packaging/macos/build_dmg_pkg.sh
       - uses: actions/upload-artifact@v4
