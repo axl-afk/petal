@@ -79,13 +79,17 @@ class MiniPlayer extends ConsumerWidget {
                                           track.displayTitle,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: petal.text.miniTitle,
+                                          style: petal.text.miniTitle.copyWith(
+                                            fontSize: 15.5,
+                                          ),
                                         ),
                                         Text(
                                           track.displayArtist,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: petal.text.miniArtist,
+                                          style: petal.text.miniArtist.copyWith(
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ],
                                     ),

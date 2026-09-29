@@ -490,7 +490,7 @@ class SettingsScreen extends ConsumerWidget {
                                     leading: Icon(Icons.playlist_add_rounded),
                                     title: Text('Playlists and favorites'),
                                     subtitle: Text(
-                                      'Tap the playlist button by a song to add it to one or more playlists. Tap the heart to save a favorite.',
+                                      'On phones, open a song’s menu to add it to a playlist or save it as a favorite; long-press a song for its playlist. On larger screens, use the playlist and heart buttons beside it.',
                                     ),
                                   ),
                                   ListTile(
