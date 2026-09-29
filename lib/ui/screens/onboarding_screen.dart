@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../data/models/auth_session.dart';
+import '../../data/services/android_permissions.dart';
 import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../state/onboarding_controller.dart';
@@ -36,6 +37,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int _step = 0;
   bool _requestingPermission = false;
   PermissionStatus? _permissionResult;
+  bool? _notificationGranted;
 
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -52,17 +54,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // `denied` with no dialog shown, rather than throwing — so trying audio
     // first and falling back to storage covers both without needing a
     // separate package to detect the exact SDK level.
-    final audio = await Permission.audio.request();
-    var result = audio;
-    if (!audio.isGranted) {
-      result = await Permission.storage.request();
-    }
+    final granted = await AndroidPermissions.requestAudioLibrary();
     if (!mounted) return;
     setState(() {
       _requestingPermission = false;
-      _permissionResult = result;
+      _permissionResult = granted
+          ? PermissionStatus.granted
+          : PermissionStatus.denied;
     });
-    if (result.isGranted) {
+    if (granted) {
       try {
         await ref.read(libraryControllerProvider.notifier).scanDeviceMusic();
       } catch (_) {
@@ -215,6 +215,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   _permissionResult != null && !_permissionResult!.isGranted,
               busy: _requestingPermission,
               onRequest: _requestAudioAccess,
+            ),
+            const SizedBox(height: 12),
+            const _InfoLine(
+              icon: Icons.notifications_active_outlined,
+              text: 'Allow playback notifications for song controls outside Petal. Android may show the system request when you first play a song.',
+            ),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final granted = await AndroidPermissions.requestPlaybackNotifications();
+                if (mounted) setState(() => _notificationGranted = granted);
+              },
+              icon: const Icon(Icons.notifications_outlined),
+              label: Text(_notificationGranted == true
+                  ? 'Playback notifications allowed'
+                  : 'Allow playback notifications'),
             ),
           ] else if (_isIOS)
             const _InfoLine(

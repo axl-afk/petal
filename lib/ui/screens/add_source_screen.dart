@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/resolved_source.dart';
 import '../../data/models/auth_session.dart';
+import '../../data/services/android_permissions.dart';
 import '../../state/auth_controller.dart';
 import '../../state/library_controller.dart';
 import '../../theme/app_theme.dart';
@@ -217,6 +218,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
       _localSuccess = null;
     });
     try {
+      if (!await AndroidPermissions.requestAudioLibrary()) {
+        throw StateError('Allow audio access to scan music on this device. You can still choose individual files without it.');
+      }
       final result = await ref
           .read(libraryControllerProvider.notifier)
           .scanDeviceMusic();

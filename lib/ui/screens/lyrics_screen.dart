@@ -225,12 +225,31 @@ class _LyricsBody extends StatelessWidget {
       );
     }
     if (!lyrics.isSynced) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          lyrics.plainText ?? '',
-          style: petal.text.lyricLine.copyWith(color: petal.colors.ink),
-        ),
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(children: [
+              Expanded(child: Text('Untimed lyrics · highlighting needs timestamps', style: petal.text.meta)),
+              IconButton(
+                tooltip: 'Search for timed lyrics',
+                onPressed: controller.reloadLyrics,
+                icon: const Icon(Icons.sync_rounded),
+              ),
+            ]),
+          ),
+          Expanded(child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              lyrics.plainText ?? '',
+              style: petal.text.lyricLine.copyWith(
+                color: petal.colors.ink,
+                fontSize: 27,
+                height: 1.6,
+              ),
+            ),
+          )),
+        ],
       );
     }
     if (lyrics.synced.isEmpty) {
@@ -273,7 +292,8 @@ class _LyricsBody extends StatelessWidget {
                   duration: const Duration(milliseconds: 180),
                   style: petal.text.lyricLine.copyWith(
                     color: active ? petal.colors.ink : petal.colors.ink2,
-                    fontWeight: FontWeight.w700,
+                    fontSize: active ? 34 : 26,
+                    fontWeight: active ? FontWeight.w800 : FontWeight.w500,
                   ),
                   child: Text(line.text),
                 ),

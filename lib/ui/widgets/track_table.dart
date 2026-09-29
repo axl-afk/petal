@@ -70,6 +70,9 @@ class TrackTable extends ConsumerWidget {
     return SliverList(
       delegate: SliverChildBuilderDelegate((context, rawIndex) {
         if (rawIndex == 0) {
+          if (MediaQuery.sizeOf(context).width < 720) {
+            return const SizedBox.shrink();
+          }
           return _TrackHeader(
             showDetails: MediaQuery.sizeOf(context).width >= 720,
           );
@@ -193,10 +196,13 @@ class _TrackRowState extends State<_TrackRow> {
           borderRadius: BorderRadius.circular(10),
           onTap: widget.isCurrent ? widget.onOpenNowPlaying : widget.onPlay,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 16 : 14,
+              vertical: compact ? 12 : 8,
+            ),
             child: Row(
               children: [
-                SizedBox(
+                if (!compact) SizedBox(
                   width: 28,
                   child: (_hover || widget.isCurrent)
                       ? IconButton(
@@ -214,7 +220,7 @@ class _TrackRowState extends State<_TrackRow> {
                           textAlign: TextAlign.center,
                         ),
                 ),
-                const SizedBox(width: 8),
+                if (!compact) const SizedBox(width: 8),
                 // The actual "playlist view music icon doesn't show up" fix
                 // — every row used to skip straight from the index/play
                 // button to text, with no artwork/placeholder icon at all,
@@ -223,11 +229,11 @@ class _TrackRowState extends State<_TrackRow> {
                 // those do when a track has no artwork.
                 TrackArt(
                   track: track,
-                  size: 36,
-                  iconSize: 16,
-                  borderRadius: BorderRadius.circular(6),
+                  size: compact ? 52 : 36,
+                  iconSize: compact ? 23 : 16,
+                  borderRadius: BorderRadius.circular(compact ? 10 : 6),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: compact ? 14 : 10),
                 Expanded(
                   flex: 3,
                   child: Column(
@@ -238,15 +244,18 @@ class _TrackRowState extends State<_TrackRow> {
                         track.displayTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: widget.isCurrent
-                            ? petal.text.trackTitleCurrent
-                            : petal.text.trackTitle,
+                        style: (widget.isCurrent
+                                ? petal.text.trackTitleCurrent
+                                : petal.text.trackTitle)
+                            .copyWith(fontSize: compact ? 16.5 : null),
                       ),
                       Text(
                         track.displayArtist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: petal.text.trackSubtitle,
+                        style: petal.text.trackSubtitle.copyWith(
+                          fontSize: compact ? 14 : null,
+                        ),
                       ),
                     ],
                   ),

@@ -10,6 +10,7 @@ import '../data/db/tables.dart';
 import '../data/models/lyric_line.dart';
 import '../data/models/track_extensions.dart';
 import '../data/services/lyrics_service.dart';
+import '../data/services/android_permissions.dart';
 import '../data/services/auth/google_auth_service.dart';
 import '../data/services/auth/microsoft_auth_service.dart';
 import '../utils/lyric_sync.dart';
@@ -83,6 +84,7 @@ class PlaybackState {
 /// notifier's rebuilds cheap.
 class PlaybackController extends StateNotifier<PlaybackState> {
   int _lyricsRequest = 0;
+  bool _askedForPlaybackNotifications = false;
   late final AudioPlayer player;
   AndroidEqualizer? _equalizer;
   final TrackDao _trackDao;
@@ -119,6 +121,15 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   Future<void> playQueue(List<Track> queue, int startIndex) async {
     if (queue.isEmpty || startIndex < 0 || startIndex >= queue.length) return;
+    if (AndroidPermissions.supported && !_askedForPlaybackNotifications) {
+      _askedForPlaybackNotifications = true;
+      // Ask in response to a real play action. Playback works even if the
+      // listener declines notification access.
+      unawaited(AndroidPermissions.requestPlaybackNotifications().then(
+        (_) {},
+        onError: (Object _) {},
+      ));
+    }
     state = state.copyWith(
       queue: queue,
       index: startIndex,
@@ -355,16 +366,17 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     final request = ++_lyricsRequest;
     if (track.lyricsLrc != null && track.lyricsLrc!.trim().isNotEmpty) {
       final lines = LyricsService.parseLrc(track.lyricsLrc!);
-      if (mounted && state.current?.id == track.id) {
+      if (lines.isNotEmpty && mounted && state.current?.id == track.id) {
         state = state.copyWith(lyrics: LyricsResult.synced(lines));
+        return;
       }
-      return;
     }
     if (track.lyricsPlain != null && track.lyricsPlain!.trim().isNotEmpty) {
       if (mounted && state.current?.id == track.id) {
         state = state.copyWith(lyrics: LyricsResult.plain(track.lyricsPlain));
       }
-      return;
+      // Embedded plain text is useful immediately, but it cannot highlight
+      // to the beat. Prefer a verified synced match when one exists online.
     }
 
     final result = await _lyricsService.fetch(
@@ -376,11 +388,33 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
     if (!mounted || state.current?.id != track.id || request != _lyricsRequest)
       return; // user moved on before this resolved
-    state = state.copyWith(lyrics: result);
+    if (result.isSynced || state.lyrics == null || !state.lyrics!.found) {
+      state = state.copyWith(lyrics: result);
+    }
 
     if (result.isSynced) {
-      await _trackDao.cacheLyrics(track.id, lrc: toLrcText(result.synced));
-    } else if (result.plainText != null) {
+      final lrc = toLrcText(result.synced);
+      await _trackDao.cacheLyrics(track.id, lrc: lrc);
+      if (mounted && state.current?.id == track.id && request == _lyricsRequest) {
+        state = state.copyWith(
+          current: state.current!.copyWith(
+            lyricsLrc: Value(lrc),
+            lyricsPlain: const Value(null),
+          ),
+          queue: [
+            for (final item in state.queue)
+              if (item.id == track.id)
+                item.copyWith(
+                  lyricsLrc: Value(lrc),
+                  lyricsPlain: const Value(null),
+                )
+              else
+                item,
+          ],
+        );
+      }
+    } else if (result.plainText != null &&
+        (track.lyricsPlain == null || track.lyricsPlain!.trim().isEmpty)) {
       await _trackDao.cacheLyrics(track.id, plain: result.plainText);
     }
   }

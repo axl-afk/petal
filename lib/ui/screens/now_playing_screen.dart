@@ -201,11 +201,31 @@ class _PlayerHeader extends StatelessWidget {
               iconSize: 28,
               icon: const Icon(Icons.fullscreen_rounded),
             ),
-            IconButton(
-              tooltip: 'More options',
-              onPressed: () {},
-              iconSize: 26,
-              icon: const Icon(Icons.more_horiz_rounded),
+            PopupMenuButton<String>(
+              tooltip: 'Player options',
+              icon: const Icon(Icons.more_horiz_rounded, size: 26),
+              onSelected: (value) {
+                switch (value) {
+                  case 'together':
+                    GroupPlaybackSheet.show(context);
+                    break;
+                  case 'equalizer':
+                    EqualizerSheet.show(context);
+                    break;
+                  case 'playlist':
+                    AddToPlaylistSheet.show(context, track);
+                    break;
+                  case 'lyrics':
+                    onShowLyrics();
+                    break;
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'lyrics', child: Text('Lyrics only')),
+                PopupMenuItem(value: 'playlist', child: Text('Add to playlist')),
+                PopupMenuItem(value: 'equalizer', child: Text('Equalizer')),
+                PopupMenuItem(value: 'together', child: Text('Listen Together')),
+              ],
             ),
           ],
         ),
@@ -1036,16 +1056,31 @@ class _InlineLyricsState extends State<_InlineLyrics> {
       );
     }
     if (!lyrics.isSynced) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(22),
-        child: Text(
-          lyrics.plainText ?? '',
-          style: petal.text.lyricLine.copyWith(
-            color: petal.colors.ink,
-            fontSize: widget.spacious ? 27 : null,
-            height: widget.spacious ? 1.65 : null,
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+            child: Row(children: [
+              Expanded(child: Text('Untimed lyrics · highlighting needs timestamps', style: petal.text.meta)),
+              IconButton(
+                tooltip: 'Search for timed lyrics',
+                onPressed: widget.controller.reloadLyrics,
+                icon: const Icon(Icons.sync_rounded),
+              ),
+            ]),
           ),
-        ),
+          Expanded(child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: Text(
+              lyrics.plainText ?? '',
+              style: petal.text.lyricLine.copyWith(
+                color: petal.colors.ink,
+                fontSize: widget.spacious ? 27 : 23,
+                height: 1.65,
+              ),
+            ),
+          )),
+        ],
       );
     }
     if (lyrics.synced.isEmpty) {
@@ -1089,9 +1124,11 @@ class _InlineLyricsState extends State<_InlineLyrics> {
                   // a lyric change from shifting every following row.
                   style: petal.text.lyricLine.copyWith(
                     color: selected ? petal.colors.ink : petal.colors.ink2,
-                    fontSize: widget.spacious ? 30 : null,
+                    fontSize: widget.spacious
+                        ? (selected ? 36 : 27)
+                        : (selected ? 27 : 22),
                     height: 1.42,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                   ),
                   child: Text(line.text),
                 ),

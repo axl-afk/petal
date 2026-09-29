@@ -262,8 +262,11 @@ the providers, their Settings sign-in buttons cannot complete authentication.
    with that platform's client ID, and append its **reversed client ID**
    (from Google Cloud) as a new entry under `CFBundleURLTypes` →
    `CFBundleURLSchemes`. Keep the existing `petalauth` URL scheme as well.
-   On macOS, signing needs the Google keychain access group already declared
-   in the Runner entitlements. Use your actual bundle IDs if changed.
+   Use your actual bundle IDs if changed. The testing build deliberately
+   does not claim a shared keychain access group: that restricted entitlement
+   requires a matching Apple provisioning profile and prevents an ad-hoc
+   signed app from launching. If a production integration needs keychain
+   sharing, configure the group with your Apple Developer team and profile.
 
 `google_sign_in` in this project supports Android, iOS, macOS and web.
 Google login on Windows/Linux still needs a separate desktop OAuth

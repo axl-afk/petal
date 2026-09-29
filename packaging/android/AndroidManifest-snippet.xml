@@ -9,6 +9,7 @@ Merge these into android/app/src/main/AndroidManifest.xml after you run
    model, with the pre-13 permission as a fallback for older devices.
 -->
 <uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
     android:maxSdkVersion="32" />
