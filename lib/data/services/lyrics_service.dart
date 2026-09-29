@@ -87,7 +87,8 @@ class LyricsService {
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return null;
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final json =
+          jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return _resultFromJson(json);
     } catch (_) {
       return null;
@@ -107,7 +108,7 @@ class LyricsService {
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return const LyricsResult.notFound();
-      final list = jsonDecode(res.body) as List<dynamic>;
+      final list = jsonDecode(utf8.decode(res.bodyBytes)) as List<dynamic>;
       if (list.isEmpty) return const LyricsResult.notFound();
 
       Map<String, dynamic> best = list.first as Map<String, dynamic>;

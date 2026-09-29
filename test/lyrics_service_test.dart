@@ -98,4 +98,27 @@ void main() {
       expect(result.found, isFalse);
     },
   );
+
+  test('decodes UTF-8 lyrics from a response without a charset', () async {
+    final service = LyricsService(
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/get')) {
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'syncedLyrics': '[00:01.00]তুমি এখানে\n[00:02.00]تم یہاں ہو',
+              }),
+            ),
+            200,
+          );
+        }
+        return http.Response('[]', 200);
+      }),
+    );
+    final result = await service.fetch(title: 'গান', artist: 'শিল্পী');
+    expect(result.synced.map((line) => line.text), [
+      'তুমি এখানে',
+      'تم یہاں ہو',
+    ]);
+  });
 }

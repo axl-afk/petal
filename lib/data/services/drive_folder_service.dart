@@ -83,7 +83,8 @@ class DriveFolderService {
           );
         }
 
-        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final json =
+            jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
         final items = (json['files'] as List<dynamic>?) ?? const [];
         for (final item in items) {
           final map = item as Map<String, dynamic>;
@@ -126,7 +127,8 @@ class DriveFolderService {
           .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) return null;
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final json =
+          jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return json['name'] as String?;
     } catch (_) {
       return null;

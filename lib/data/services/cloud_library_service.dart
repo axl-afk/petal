@@ -41,7 +41,8 @@ class CloudLibraryService {
           .get(uri, headers: {'Authorization': 'Bearer $accessToken'})
           .timeout(const Duration(seconds: 30));
       _requireSuccess(response, 'Google Drive');
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       for (final raw in (body['files'] as List<dynamic>? ?? const [])) {
         final file = raw as Map<String, dynamic>;
         final id = file['id'] as String?;
@@ -85,7 +86,8 @@ class CloudLibraryService {
           .get(next, headers: {'Authorization': 'Bearer $accessToken'})
           .timeout(const Duration(seconds: 30));
       _requireSuccess(response, 'OneDrive');
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       for (final raw in (body['value'] as List<dynamic>? ?? const [])) {
         final file = raw as Map<String, dynamic>;
         if (file['deleted'] != null || file['folder'] != null) continue;
@@ -161,7 +163,8 @@ class CloudLibraryService {
             .get(page, headers: {'Authorization': 'Bearer $accessToken'})
             .timeout(const Duration(seconds: 30));
         _requireSuccess(response, 'OneDrive folder');
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final body =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         for (final raw in (body['value'] as List<dynamic>? ?? const [])) {
           final file = raw as Map<String, dynamic>;
           final id = file['id'] as String?;
