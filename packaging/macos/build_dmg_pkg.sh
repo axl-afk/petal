@@ -13,7 +13,8 @@
 set -euo pipefail
 
 APP_NAME="Petal"
-BUILD_APP="build/macos/Build/Products/Release/${APP_NAME}.app"
+BUILD_DIR="build/macos/Build/Products/Release"
+BUILD_APP="$BUILD_DIR/petal.app"
 OUT_DIR="build/macos-installers"
 
 if [ ! -d "$BUILD_APP" ]; then
@@ -21,18 +22,26 @@ if [ ! -d "$BUILD_APP" ]; then
   exit 1
 fi
 
+if [ ! -x "$BUILD_APP/Contents/MacOS/petal" ]; then
+  echo "error: the app executable is missing or not executable." >&2
+  exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 
 # --- .dmg -------------------------------------------------------------
 DMG_STAGING=$(mktemp -d)
-cp -R "$BUILD_APP" "$DMG_STAGING/"
+trap 'rm -rf "$DMG_STAGING"' EXIT
+# Flutter's actual bundle is petal.app. Give both installers the same,
+# predictable display name, even on a case-sensitive APFS volume. ditto
+# preserves bundle metadata and code signatures when copying macOS apps.
+ditto "$BUILD_APP" "$DMG_STAGING/${APP_NAME}.app"
 ln -s /Applications "$DMG_STAGING/Applications"
 hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_STAGING" -ov -format UDZO "$OUT_DIR/${APP_NAME}.dmg"
-rm -rf "$DMG_STAGING"
 echo "Built $OUT_DIR/${APP_NAME}.dmg"
 
 # --- .pkg -------------------------------------------------------------
-pkgbuild --component "$BUILD_APP" \
+pkgbuild --component "$DMG_STAGING/${APP_NAME}.app" \
   --install-location "/Applications" \
   --identifier "com.petal.player.pkg" \
   --version "1.0.0" \

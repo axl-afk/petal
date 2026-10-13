@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 Widget buildLocalTrackArt({
   required String path,
   required double size,
+  required int decodeWidth,
   required BorderRadius radius,
   required Widget Function() placeholder,
 }) {

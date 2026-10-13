@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+
 import 'dart:convert';
 
 import '../../data/models/auth_session.dart';
@@ -11,6 +12,7 @@ import '../../state/library_controller.dart';
 import '../../state/nav_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/ui_scale.dart';
+import '../widgets/glass_surface.dart';
 
 class SideRail extends ConsumerWidget {
   const SideRail({super.key});
@@ -27,114 +29,155 @@ class SideRail extends ConsumerWidget {
     final driveConnected = session?.provider == AuthProviderKind.google;
     final oneDriveConnected = session?.provider == AuthProviderKind.microsoft;
 
-    return Container(
-      width: PetalTheme.railWidth * UiScale.of(context),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
-      decoration: BoxDecoration(
-        color: petal.colors.surface.withOpacity(0.5),
-        border: Border(right: BorderSide(color: petal.colors.hairline)),
-      ),
-      child: ListView(
-        children: [
-          _RailAction(
-            icon: Icons.search_rounded,
-            label: l10n.search,
-            onTap: () => ref.read(currentSectionProvider.notifier).state =
-                AppSection.library,
-          ),
-          _RailAction(
-            icon: Icons.home_outlined,
-            label: l10n.home,
-            selected: !library.filter.isActive &&
-                library.tab == LibraryTab.songs,
-            onTap: () {
-              ref.read(currentSectionProvider.notifier).state =
-                  AppSection.library;
-              ref
-                  .read(libraryControllerProvider.notifier)
-                  .setTab(LibraryTab.songs);
-            },
-          ),
-          const SizedBox(height: 16),
-          _SectionLabel(l10n.library.toUpperCase()),
-          _LibraryRow(
-            icon: Icons.favorite_outline_rounded,
-            label: l10n.favoriteSongs,
-            tab: LibraryTab.favorites,
-            activeTab: library.tab,
-          ),
-          _LibraryRow(
-            icon: Icons.music_note_rounded,
-            label: l10n.songs,
-            tab: LibraryTab.songs,
-            activeTab: library.tab,
-          ),
-          _LibraryRow(
-            icon: Icons.mic_none_rounded,
-            label: l10n.artists,
-            tab: LibraryTab.artists,
-            activeTab: library.tab,
-          ),
-          _LibraryRow(
-            icon: Icons.album_outlined,
-            label: l10n.albums,
-            tab: LibraryTab.albums,
-            activeTab: library.tab,
-          ),
-          _LibraryRow(
-            icon: Icons.grid_view_rounded,
-            label: l10n.genres,
-            tab: LibraryTab.genres,
-            activeTab: library.tab,
-          ),
-          _LibraryRow(
-            icon: Icons.queue_music_rounded,
-            label: l10n.allPlaylists,
-            tab: LibraryTab.playlists,
-            activeTab: library.tab,
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(child: _SectionLabel(l10n.playlists.toUpperCase())),
-              IconButton(
-                iconSize: 16,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                icon: const Icon(Icons.add),
-                color: petal.colors.ink2,
-                tooltip: 'New playlist',
-                onPressed: () => _createPlaylist(context, ref),
-              ),
-            ],
-          ),
-          playlistsAsync.when(
-            data: (playlists) => Column(
-              children: playlists
-                  .map((p) => _RailAction(
+    return GlassSurface(
+      borderRadius: BorderRadius.zero,
+      blur: 12,
+      tint: petal.colors.surface.withOpacity(.30),
+      child: SizedBox(
+        width: PetalTheme.railWidth * UiScale.of(context),
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+          children: [
+            _RailAction(
+              icon: Icons.search_rounded,
+              label: l10n.search,
+              selected: ref.watch(currentSectionProvider) == AppSection.search,
+              onTap: () {
+                ref
+                    .read(libraryControllerProvider.notifier)
+                    .setTab(LibraryTab.songs);
+                ref.read(currentSectionProvider.notifier).state =
+                    AppSection.search;
+              },
+            ),
+            _RailAction(
+              icon: Icons.home_outlined,
+              label: l10n.home,
+              selected: ref.watch(currentSectionProvider) == AppSection.home,
+              onTap: () {
+                ref.read(currentSectionProvider.notifier).state =
+                    AppSection.home;
+              },
+            ),
+            _RailAction(
+              icon: Icons.library_music_outlined,
+              label: l10n.library,
+              selected:
+                  ref.watch(currentSectionProvider) == AppSection.library &&
+                  !library.filter.isActive,
+              onTap: () {
+                ref
+                    .read(libraryControllerProvider.notifier)
+                    .setTab(LibraryTab.songs);
+                ref.read(currentSectionProvider.notifier).state =
+                    AppSection.library;
+              },
+            ),
+            const SizedBox(height: 16),
+            _SectionLabel(l10n.library.toUpperCase()),
+            _LibraryRow(
+              icon: Icons.favorite_outline_rounded,
+              label: l10n.favoriteSongs,
+              tab: LibraryTab.favorites,
+              activeTab: library.tab,
+            ),
+            _LibraryRow(
+              icon: Icons.music_note_rounded,
+              label: l10n.songs,
+              tab: LibraryTab.songs,
+              activeTab: library.tab,
+            ),
+            _LibraryRow(
+              icon: Icons.mic_none_rounded,
+              label: l10n.artists,
+              tab: LibraryTab.artists,
+              activeTab: library.tab,
+            ),
+            _LibraryRow(
+              icon: Icons.album_outlined,
+              label: l10n.albums,
+              tab: LibraryTab.albums,
+              activeTab: library.tab,
+            ),
+            _LibraryRow(
+              icon: Icons.grid_view_rounded,
+              label: l10n.genres,
+              tab: LibraryTab.genres,
+              activeTab: library.tab,
+            ),
+            _LibraryRow(
+              icon: Icons.queue_music_rounded,
+              label: l10n.allPlaylists,
+              tab: LibraryTab.playlists,
+              activeTab: library.tab,
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(child: _SectionLabel(l10n.playlists.toUpperCase())),
+                IconButton(
+                  iconSize: 16,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  icon: const Icon(Icons.add),
+                  color: petal.colors.ink2,
+                  tooltip: 'New playlist',
+                  onPressed: () => _createPlaylist(context, ref),
+                ),
+              ],
+            ),
+            playlistsAsync.when(
+              data: (playlists) => Column(
+                children: playlists
+                    .map(
+                      (p) => _RailAction(
                         icon: Icons.queue_music,
                         label: p.name,
                         onTap: () {
-                          ref.read(currentSectionProvider.notifier).state = AppSection.library;
-                          ref.read(libraryControllerProvider.notifier).filterByPlaylist(p.id, p.name);
+                          ref.read(currentSectionProvider.notifier).state =
+                              AppSection.library;
+                          ref
+                              .read(libraryControllerProvider.notifier)
+                              .filterByPlaylist(p.id, p.name);
                         },
-                      ))
-                  .toList(),
+                      ),
+                    )
+                    .toList(),
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
             ),
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
-          const SizedBox(height: 18),
-          _SectionLabel(l10n.sources.toUpperCase()),
-          _SourceRow(icon: Icons.phone_android_rounded, label: l10n.thisDevice, connected: localConnected, locked: kIsWeb),
-          _SourceRow(icon: Icons.cloud_outlined, label: 'Google Drive', connected: driveConnected, locked: false),
-          _SourceRow(icon: Icons.cloud_queue, label: 'OneDrive', connected: oneDriveConnected, locked: false),
-          _RailAction(
-            icon: Icons.add,
-            label: l10n.addSource,
-            onTap: () => ref.read(currentSectionProvider.notifier).state = AppSection.addSource,
-          ),
-        ],
+            const SizedBox(height: 18),
+            _SectionLabel(l10n.sources.toUpperCase()),
+            _SourceRow(
+              icon: Icons.phone_android_rounded,
+              label: l10n.thisDevice,
+              connected: localConnected,
+              locked: kIsWeb,
+            ),
+            _SourceRow(
+              icon: Icons.cloud_outlined,
+              label: 'Google Drive',
+              connected: driveConnected,
+              locked: false,
+            ),
+            _SourceRow(
+              icon: Icons.cloud_queue,
+              label: 'OneDrive',
+              connected: oneDriveConnected,
+              locked: false,
+            ),
+            _RailAction(
+              icon: Icons.add,
+              label: l10n.addSource,
+              onTap: () => ref.read(currentSectionProvider.notifier).state =
+                  AppSection.addSource,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -168,13 +211,21 @@ class SideRail extends ConsumerWidget {
                     width: 132,
                     height: 132,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: artworkData == null
-                        ? const Icon(Icons.add_photo_alternate_outlined, size: 38)
-                        : Image.memory(base64Decode(artworkData!), fit: BoxFit.cover),
+                        ? const Icon(
+                            Icons.add_photo_alternate_outlined,
+                            size: 38,
+                          )
+                        : Image.memory(
+                            base64Decode(artworkData!),
+                            fit: BoxFit.cover,
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -187,7 +238,10 @@ class SideRail extends ConsumerWidget {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
               onPressed: () => Navigator.pop(
                 ctx,
@@ -200,10 +254,9 @@ class SideRail extends ConsumerWidget {
       ),
     );
     if (draft != null && draft.name.trim().isNotEmpty) {
-      await ref.read(libraryControllerProvider.notifier).createPlaylist(
-            draft.name.trim(),
-            artworkData: draft.artworkData,
-          );
+      await ref
+          .read(libraryControllerProvider.notifier)
+          .createPlaylist(draft.name.trim(), artworkData: draft.artworkData);
     }
   }
 }
@@ -232,7 +285,12 @@ class _SourceRow extends StatelessWidget {
   final String label;
   final bool connected;
   final bool locked;
-  const _SourceRow({required this.icon, required this.label, required this.connected, required this.locked});
+  const _SourceRow({
+    required this.icon,
+    required this.label,
+    required this.connected,
+    required this.locked,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +301,15 @@ class _SourceRow extends StatelessWidget {
         children: [
           Icon(icon, size: 17, color: petal.colors.ink2),
           const SizedBox(width: 10),
-          Expanded(child: Text(label, style: petal.text.trackSubtitle.copyWith(fontSize: 13, color: petal.colors.ink))),
+          Expanded(
+            child: Text(
+              label,
+              style: petal.text.trackSubtitle.copyWith(
+                fontSize: 13,
+                color: petal.colors.ink,
+              ),
+            ),
+          ),
           if (locked)
             Icon(Icons.lock_outline, size: 13, color: petal.colors.ink3)
           else
@@ -266,29 +332,56 @@ class _RailAction extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool selected;
-  const _RailAction({required this.icon, required this.label, required this.onTap, this.selected = false});
+  const _RailAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final petal = context.petal;
-    return Material(
-      color: selected ? petal.colors.surface2 : Colors.transparent,
+    final tile = Material(
+      color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: selected ? petal.colors.accent : petal.colors.ink2),
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? petal.colors.accent : petal.colors.ink2,
+              ),
               const SizedBox(width: 10),
               Expanded(
-                  child: Text(label, overflow: TextOverflow.ellipsis, style: petal.text.trackSubtitle.copyWith(color: petal.colors.ink, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: petal.text.trackSubtitle.copyWith(
+                    color: petal.colors.ink,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
               ),
             ],
           ),
         ),
       ),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: selected
+          ? GlassSurface(
+              borderRadius: BorderRadius.circular(12),
+              blur: 8,
+              tint: petal.colors.surface2.withOpacity(.50),
+              child: tile,
+            )
+          : tile,
     );
   }
 }
@@ -311,7 +404,9 @@ class _LibraryRow extends ConsumerWidget {
     return _RailAction(
       icon: icon,
       label: label,
-      selected: tab == activeTab &&
+      selected:
+          tab == activeTab &&
+          ref.watch(currentSectionProvider) == AppSection.library &&
           !ref.watch(libraryControllerProvider).filter.isActive,
       onTap: () {
         ref.read(currentSectionProvider.notifier).state = AppSection.library;

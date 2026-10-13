@@ -5,6 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// rather than pushing Navigator routes, which keeps the responsive
 /// rail/top-bar/mini-player shell trivially in sync with "what's showing"
 /// on every platform including web.
-enum AppSection { library, nowPlaying, lyrics, addSource, settings }
+enum AppSection {
+  home,
+  library,
+  search,
+  nowPlaying,
+  lyrics,
+  addSource,
+  settings,
+}
 
-final currentSectionProvider = StateProvider<AppSection>((ref) => AppSection.library);
+final currentSectionProvider = StateProvider<AppSection>(
+  (ref) => AppSection.home,
+);

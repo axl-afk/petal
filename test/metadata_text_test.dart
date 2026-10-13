@@ -19,6 +19,40 @@ void main() {
     expect(looksLikeCorruptedMetadata(title), isFalse);
   });
 
+  test('repairs Russian, Greek, Japanese and Korean UTF-8 tag mojibake', () {
+    for (final original in ['Привет мир', 'Αγάπη', '夜に駆ける', '사랑해']) {
+      final mojibake = latin1.decode(utf8.encode(original));
+      expect(cleanMetadataText(mojibake), original);
+    }
+  });
+
+  test('preserves correctly decoded multilingual metadata', () {
+    for (final title in [
+      'Москва',
+      'Αθήνα',
+      '東京',
+      '서울',
+      'ঢাকা',
+      'Édith Piaf',
+      'أم كلثوم',
+      'עידן רייכל',
+      'เพลงรัก',
+      'မြန်မာသီချင်း',
+      'ጤና ይስጥልኝ',
+      'ქართული სიმღერა',
+      '🎵 música',
+    ]) {
+      expect(cleanMetadataText(title), title);
+    }
+  });
+
+  test('repairs accented Latin and emoji without harming original text', () {
+    for (final original in ['Beyoncé', 'Été', 'Dance 🎵']) {
+      expect(cleanMetadataText(latin1.decode(utf8.encode(original))), original);
+      expect(cleanMetadataText(original), original);
+    }
+  });
+
   test('removes null padding used by legacy ID3 fields', () {
     expect(cleanMetadataText('Wishes\u0000\u0000'), 'Wishes');
   });

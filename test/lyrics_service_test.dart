@@ -6,45 +6,51 @@ import 'package:http/testing.dart';
 import 'package:petal/data/services/lyrics_service.dart';
 
 void main() {
-  test('normalizes filename tags and scores synced lyrics above loose results', () async {
-    final requests = <Uri>[];
-    final client = MockClient((request) async {
-      requests.add(request.url);
-      expect(request.headers['user-agent'], contains('Petal/'));
-      if (request.url.path.endsWith('/get')) {
-        return http.Response('{}', 404);
-      }
-      return http.Response(
-        jsonEncode([
-          {
-            'trackName': 'Wishes',
-            'artistName': 'Another Artist',
-            'duration': 218,
-            'plainLyrics': 'Wrong result',
-          },
-          {
-            'trackName': 'Wishes',
-            'artistName': 'Hasan Raheem',
-            'duration': 218,
-            'syncedLyrics': '[00:01.00]First line\n[00:04.20]Second line',
-          },
-        ]),
-        200,
+  test(
+    'normalizes filename tags and scores synced lyrics above loose results',
+    () async {
+      final requests = <Uri>[];
+      final client = MockClient((request) async {
+        requests.add(request.url);
+        expect(request.headers['user-agent'], contains('Petal/'));
+        if (request.url.path.endsWith('/get')) {
+          return http.Response('{}', 404);
+        }
+        return http.Response(
+          jsonEncode([
+            {
+              'trackName': 'Wishes',
+              'artistName': 'Another Artist',
+              'duration': 218,
+              'plainLyrics': 'Wrong result',
+            },
+            {
+              'trackName': 'Wishes',
+              'artistName': 'Hasan Raheem',
+              'duration': 218,
+              'syncedLyrics': '[00:01.00]First line\n[00:04.20]Second line',
+            },
+          ]),
+          200,
+        );
+      });
+
+      final result = await LyricsService(client: client).fetch(
+        title: 'Wishes (Official Audio).mp3',
+        artist: 'Hasan Raheem (feat. guest)',
+        duration: const Duration(seconds: 218),
       );
-    });
 
-    final result = await LyricsService(client: client).fetch(
-      title: 'Wishes (Official Audio).mp3',
-      artist: 'Hasan Raheem (feat. guest)',
-      duration: const Duration(seconds: 218),
-    );
-
-    expect(result.isSynced, isTrue);
-    expect(result.synced.map((line) => line.text), ['First line', 'Second line']);
-    final search = requests.last;
-    expect(search.queryParameters['track_name'], 'Wishes');
-    expect(search.queryParameters['artist_name'], 'Hasan Raheem');
-  });
+      expect(result.isSynced, isTrue);
+      expect(result.synced.map((line) => line.text), [
+        'First line',
+        'Second line',
+      ]);
+      final search = requests.last;
+      expect(search.queryParameters['track_name'], 'Wishes');
+      expect(search.queryParameters['artist_name'], 'Hasan Raheem');
+    },
+  );
 
   test('parses multiple timestamps and keeps lyric time order', () {
     final lines = LyricsService.parseLrc(
@@ -54,5 +60,65 @@ void main() {
     expect(lines.map((line) => line.text), ['Verse', 'Chorus', 'Chorus']);
     expect(lines.first.time, const Duration(seconds: 3, milliseconds: 250));
     expect(lines.last.time, const Duration(seconds: 20, milliseconds: 500));
+  });
+
+  test('keeps multilingual lyric text and timestamps intact', () {
+    final lines = LyricsService.parseLrc(
+      '[00:01.20]তুমি আমার\n[00:02.40]أنت هنا\n[00:03.60]君の声 🎵',
+    );
+
+    expect(lines.map((line) => line.text), ['তুমি আমার', 'أنت هنا', '君の声 🎵']);
+    expect(lines.first.time, const Duration(milliseconds: 1200));
+  });
+
+  test(
+    'does not attach a different artist’s lyrics to the first song',
+    () async {
+      final service = LyricsService(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/get')) {
+            return http.Response('{}', 404);
+          }
+          return http.Response(
+            jsonEncode([
+              {
+                'trackName': 'Dil',
+                'artistName': 'Someone Else',
+                'plainLyrics': 'Wrong lyrics',
+              },
+            ]),
+            200,
+          );
+        }),
+      );
+      final result = await service.fetch(
+        title: 'Dil',
+        artist: 'Another Singer',
+      );
+      expect(result.found, isFalse);
+    },
+  );
+
+  test('decodes UTF-8 lyrics from a response without a charset', () async {
+    final service = LyricsService(
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/get')) {
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'syncedLyrics': '[00:01.00]তুমি এখানে\n[00:02.00]تم یہاں ہو',
+              }),
+            ),
+            200,
+          );
+        }
+        return http.Response('[]', 200);
+      }),
+    );
+    final result = await service.fetch(title: 'গান', artist: 'শিল্পী');
+    expect(result.synced.map((line) => line.text), [
+      'তুমি এখানে',
+      'تم یہاں ہو',
+    ]);
   });
 }

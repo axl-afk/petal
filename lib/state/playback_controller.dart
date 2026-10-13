@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:drift/drift.dart' show Value;
 
 import '../data/db/app_database.dart';
 import '../data/db/daos/track_dao.dart';
@@ -9,6 +10,7 @@ import '../data/db/tables.dart';
 import '../data/models/lyric_line.dart';
 import '../data/models/track_extensions.dart';
 import '../data/services/lyrics_service.dart';
+import '../data/services/android_permissions.dart';
 import '../data/services/auth/google_auth_service.dart';
 import '../data/services/auth/microsoft_auth_service.dart';
 import '../utils/lyric_sync.dart';
@@ -81,6 +83,8 @@ class PlaybackState {
 /// [player].durationStream directly via a StreamBuilder, keeping this
 /// notifier's rebuilds cheap.
 class PlaybackController extends StateNotifier<PlaybackState> {
+  int _lyricsRequest = 0;
+  bool _askedForPlaybackNotifications = false;
   late final AudioPlayer player;
   AndroidEqualizer? _equalizer;
   final TrackDao _trackDao;
@@ -117,6 +121,15 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   Future<void> playQueue(List<Track> queue, int startIndex) async {
     if (queue.isEmpty || startIndex < 0 || startIndex >= queue.length) return;
+    if (AndroidPermissions.supported && !_askedForPlaybackNotifications) {
+      _askedForPlaybackNotifications = true;
+      // Ask in response to a real play action. Playback works even if the
+      // listener declines notification access.
+      unawaited(AndroidPermissions.requestPlaybackNotifications().then(
+        (_) {},
+        onError: (Object _) {},
+      ));
+    }
     state = state.copyWith(
       queue: queue,
       index: startIndex,
@@ -167,7 +180,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       LoopMode.all => LoopMode.one,
       LoopMode.one => LoopMode.off,
     };
-    await player.setLoopMode(next == LoopMode.one ? LoopMode.one : LoopMode.off);
+    await player.setLoopMode(
+      next == LoopMode.one ? LoopMode.one : LoopMode.off,
+    );
     state = state.copyWith(loopMode: next);
   }
 
@@ -190,16 +205,19 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     final parameters = await equalizerParameters();
     if (parameters == null || normalizedGains.isEmpty) return;
     for (var i = 0; i < parameters.bands.length; i++) {
-      final normalized = normalizedGains[
-        (i * normalizedGains.length ~/ parameters.bands.length)
-            .clamp(0, normalizedGains.length - 1)
-      ].clamp(-1.0, 1.0).toDouble();
+      final normalized =
+          normalizedGains[(i *
+                      normalizedGains.length ~/
+                      parameters.bands.length)
+                  .clamp(0, normalizedGains.length - 1)]
+              .clamp(-1.0, 1.0)
+              .toDouble();
       final gain = normalized >= 0
           ? normalized * parameters.maxDecibels
           : -normalized.abs() * parameters.minDecibels.abs();
-      await parameters.bands[i].setGain(gain
-          .clamp(parameters.minDecibels, parameters.maxDecibels)
-          .toDouble());
+      await parameters.bands[i].setGain(
+        gain.clamp(parameters.minDecibels, parameters.maxDecibels).toDouble(),
+      );
     }
   }
 
@@ -210,8 +228,10 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       return;
     }
     if (state.shuffleEnabled && state.queue.length > 1) {
-      var nextIndex = (DateTime.now().microsecondsSinceEpoch % state.queue.length).toInt();
-      if (nextIndex == state.index) nextIndex = (nextIndex + 1) % state.queue.length;
+      var nextIndex =
+          (DateTime.now().microsecondsSinceEpoch % state.queue.length).toInt();
+      if (nextIndex == state.index)
+        nextIndex = (nextIndex + 1) % state.queue.length;
       await playAt(nextIndex);
       return;
     }
@@ -254,9 +274,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   void reflectFavorite(String trackId, bool isFavorite) {
     final current = state.current;
     final updatedQueue = state.queue
-        .map((track) => track.id == trackId
-            ? track.copyWith(isFavorite: isFavorite)
-            : track)
+        .map(
+          (track) => track.id == trackId
+              ? track.copyWith(isFavorite: isFavorite)
+              : track,
+        )
         .toList(growable: false);
     state = state.copyWith(
       current: current?.id == trackId
@@ -269,6 +291,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   Future<void> _loadCurrentAndPlay() async {
     final track = state.current;
     if (track == null) return;
+    // The play() future can remain pending until playback completes. Start
+    // lyrics as soon as the track is selected, including the first song.
+    unawaited(_loadLyricsFor(track));
     try {
       Uri source;
       Map<String, String>? headers;
@@ -303,15 +328,24 @@ class PlaybackController extends StateNotifier<PlaybackState> {
             title: track.displayTitle,
             artist: track.displayArtist,
             album: track.displayAlbum.isEmpty ? null : track.displayAlbum,
-            duration: track.duration.inMilliseconds > 0
-                ? track.duration
-                : null,
+            duration: track.duration.inMilliseconds > 0 ? track.duration : null,
             artUri: _artworkUri(track.artworkUrl),
             playable: true,
           ),
         ),
       );
-      await player.play();
+      unawaited(
+        player.play().then(
+          (_) {},
+          onError: (Object error) {
+            if (!mounted || state.current?.id != track.id) return;
+            state = state.copyWith(
+              isPlaying: false,
+              error: 'Could not play "${track.displayTitle}": $error',
+            );
+          },
+        ),
+      );
       state = state.copyWith(clearError: true);
     } catch (e) {
       state = state.copyWith(
@@ -319,7 +353,6 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         error: 'Could not play "${track.displayTitle}": $e',
       );
     }
-    unawaited(_loadLyricsFor(track));
   }
 
   Uri? _artworkUri(String? raw) {
@@ -330,18 +363,20 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   Future<void> _loadLyricsFor(Track track) async {
+    final request = ++_lyricsRequest;
     if (track.lyricsLrc != null && track.lyricsLrc!.trim().isNotEmpty) {
       final lines = LyricsService.parseLrc(track.lyricsLrc!);
-      if (state.current?.id == track.id) {
+      if (lines.isNotEmpty && mounted && state.current?.id == track.id) {
         state = state.copyWith(lyrics: LyricsResult.synced(lines));
+        return;
       }
-      return;
     }
     if (track.lyricsPlain != null && track.lyricsPlain!.trim().isNotEmpty) {
-      if (state.current?.id == track.id) {
+      if (mounted && state.current?.id == track.id) {
         state = state.copyWith(lyrics: LyricsResult.plain(track.lyricsPlain));
       }
-      return;
+      // Embedded plain text is useful immediately, but it cannot highlight
+      // to the beat. Prefer a verified synced match when one exists online.
     }
 
     final result = await _lyricsService.fetch(
@@ -351,13 +386,35 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       duration: track.duration,
     );
 
-    if (state.current?.id != track.id)
+    if (!mounted || state.current?.id != track.id || request != _lyricsRequest)
       return; // user moved on before this resolved
-    state = state.copyWith(lyrics: result);
+    if (result.isSynced || state.lyrics == null || !state.lyrics!.found) {
+      state = state.copyWith(lyrics: result);
+    }
 
     if (result.isSynced) {
-      await _trackDao.cacheLyrics(track.id, lrc: toLrcText(result.synced));
-    } else if (result.plainText != null) {
+      final lrc = toLrcText(result.synced);
+      await _trackDao.cacheLyrics(track.id, lrc: lrc);
+      if (mounted && state.current?.id == track.id && request == _lyricsRequest) {
+        state = state.copyWith(
+          current: state.current!.copyWith(
+            lyricsLrc: Value(lrc),
+            lyricsPlain: const Value(null),
+          ),
+          queue: [
+            for (final item in state.queue)
+              if (item.id == track.id)
+                item.copyWith(
+                  lyricsLrc: Value(lrc),
+                  lyricsPlain: const Value(null),
+                )
+              else
+                item,
+          ],
+        );
+      }
+    } else if (result.plainText != null &&
+        (track.lyricsPlain == null || track.lyricsPlain!.trim().isEmpty)) {
       await _trackDao.cacheLyrics(track.id, plain: result.plainText);
     }
   }
@@ -370,6 +427,42 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     if (track == null) return;
     state = state.copyWith(clearLyrics: true);
     await _loadLyricsFor(track);
+  }
+
+  /// Saves user supplied Unicode plain text or timed LRC on the current song.
+  /// It takes precedence over an in-flight network lookup and survives replay.
+  Future<void> saveLyrics(String input) async {
+    final track = state.current;
+    if (track == null) return;
+    final value = input.trim();
+    if (value.isEmpty) throw ArgumentError('Lyrics cannot be empty.');
+    final lines = LyricsService.parseLrc(value);
+    ++_lyricsRequest;
+    await _trackDao.cacheLyrics(
+      track.id,
+      lrc: lines.isEmpty ? null : value,
+      plain: lines.isEmpty ? value : null,
+    );
+    if (!mounted || state.current?.id != track.id) return;
+    state = state.copyWith(
+      lyrics: lines.isEmpty
+          ? LyricsResult.plain(value)
+          : LyricsResult.synced(lines),
+      queue: [
+        for (final item in state.queue)
+          if (item.id == track.id)
+            item.copyWith(
+              lyricsLrc: Value(lines.isEmpty ? null : value),
+              lyricsPlain: Value(lines.isEmpty ? value : null),
+            )
+          else
+            item,
+      ],
+      current: track.copyWith(
+        lyricsLrc: Value(lines.isEmpty ? null : value),
+        lyricsPlain: Value(lines.isEmpty ? value : null),
+      ),
+    );
   }
 
   @override

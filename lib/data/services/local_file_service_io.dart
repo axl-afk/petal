@@ -26,7 +26,10 @@ class LocalFileService {
       withData: false,
     );
     if (result == null) return [];
-    return result.files.where((f) => f.path != null).map((f) => f.path!).toList();
+    return result.files
+        .where((f) => f.path != null)
+        .map((f) => f.path!)
+        .toList();
   }
 
   /// Folder picker + recursive scan — finds every audio file anywhere under
@@ -40,9 +43,15 @@ class LocalFileService {
     if (!await dir.exists()) return [];
     final found = <String>[];
     try {
-      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is! File) continue;
-        final ext = p.extension(entity.path).replaceFirst('.', '').toLowerCase();
+        final ext = p
+            .extension(entity.path)
+            .replaceFirst('.', '')
+            .toLowerCase();
         if (kAudioExtensions.contains(ext)) found.add(entity.path);
       }
     } catch (_) {
@@ -87,7 +96,9 @@ class LocalFileService {
   /// Linux/proc+sys+dev). [onProgress], if given, is called after every
   /// newly-found file so a caller can show a live count during a scan that
   /// might run for tens of seconds to minutes on a large or slow disk.
-  Future<List<String>> scanWholeComputer({void Function(int foundSoFar)? onProgress}) async {
+  Future<List<String>> scanWholeComputer({
+    void Function(int foundSoFar)? onProgress,
+  }) async {
     final found = <String>[];
     for (final root in await _wholeComputerRoots()) {
       await _scanTreeSkippingNoise(root, found, onProgress);
@@ -128,11 +139,14 @@ class LocalFileService {
           await for (final v in volumes.list(followLinks: false)) {
             if (v is Directory) roots.add(v);
           }
-        } catch (_) {/* ignore, use whatever roots were already found */}
+        } catch (_) {
+          /* ignore, use whatever roots were already found */
+        }
       }
     } else if (Platform.isLinux) {
       final home = Platform.environment['HOME'];
-      if (home != null && await Directory(home).exists()) roots.add(Directory(home));
+      if (home != null && await Directory(home).exists())
+        roots.add(Directory(home));
       // Common external-drive mount points on Linux desktops.
       for (final mountBase in ['/media', '/mnt']) {
         final d = Directory(mountBase);
@@ -164,9 +178,17 @@ class LocalFileService {
       if (name.startsWith('.')) continue; // hidden files/folders
       if (entity is Directory) {
         if (_wholeComputerSkipDirs.contains(name.toLowerCase())) continue;
-        await _scanTreeSkippingNoise(entity, found, onProgress, depth: depth + 1);
+        await _scanTreeSkippingNoise(
+          entity,
+          found,
+          onProgress,
+          depth: depth + 1,
+        );
       } else if (entity is File) {
-        final ext = p.extension(entity.path).replaceFirst('.', '').toLowerCase();
+        final ext = p
+            .extension(entity.path)
+            .replaceFirst('.', '')
+            .toLowerCase();
         if (kAudioExtensions.contains(ext)) {
           found.add(entity.path);
           onProgress?.call(found.length);
@@ -175,19 +197,16 @@ class LocalFileService {
     }
   }
 
-  /// Best-effort title from a bare filename: strip the extension, swap
-  /// underscores/dashes for spaces, title-case it. Used whenever real tag
-  /// reading fails or the file has no tags at all.
+  /// Best-effort title from a bare filename. Preserve the original script
+  /// and case: automatic title-casing damages proper names and languages
+  /// whose writing systems do not use Latin-style capitalization.
   String titleFromFileName(String fileName) {
     var name = fileName;
     final dot = name.lastIndexOf('.');
     if (dot > 0) name = name.substring(0, dot);
-    name = name.replaceAll(RegExp(r'[_\-]+'), ' ').trim();
+    name = name.replaceAll('_', ' ').trim();
     if (name.isEmpty) return 'Untitled';
-    return name
-        .split(' ')
-        .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
-        .join(' ');
+    return cleanMetadataText(name);
   }
 
   /// Copies the picked file into Petal's own app-storage folder and reads
@@ -268,7 +287,9 @@ class LocalFileService {
           // case 't') is a plain String like "image/png"/"image/jpeg" —
           // unlike audiotags' generated MimeType enum, this needs no
           // toString() workaround to inspect.
-          final artExt = pic.mimetype.toLowerCase().contains('png') ? '.png' : '.jpg';
+          final artExt = pic.mimetype.toLowerCase().contains('png')
+              ? '.png'
+              : '.jpg';
           final artFile = File(p.join(artDir.path, '$id$artExt'));
           await artFile.writeAsBytes(pic.bytes, flush: true);
           artworkPath = artFile.path;
@@ -288,6 +309,25 @@ class LocalFileService {
     // to the album rather than embedding it in every audio file. Treat the
     // conventional cover/folder/front names as a metadata fallback.
     artworkPath ??= await _copySidecarArtwork(originalPath, id);
+
+    // A same-name .lrc is a common portable companion to FLAC/MP3 libraries.
+    // Read UTF-8 as-is so Bengali, Devanagari, Arabic and other scripts are
+    // preserved. A malformed or oversized sidecar must not block audio import.
+    String? lyricsLrc;
+    String? lyricsPlain;
+    final sidecar = File(p.setExtension(originalPath, '.lrc'));
+    try {
+      if (await sidecar.exists() && await sidecar.length() <= 1024 * 1024) {
+        final value = await sidecar.readAsString();
+        if (value.trim().isNotEmpty) {
+          if (RegExp(r'\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]').hasMatch(value)) {
+            lyricsLrc = value;
+          } else {
+            lyricsPlain = value;
+          }
+        }
+      }
+    } catch (_) {}
 
     // A common tag-less filename convention is "Artist - Title.ext". Keep
     // the conservative filename fallback, but recover the artist when that
@@ -310,6 +350,8 @@ class LocalFileService {
       genre: genre,
       durationMs: durationMs,
       artworkPath: artworkPath,
+      lyricsLrc: lyricsLrc,
+      lyricsPlain: lyricsPlain,
     );
   }
 
@@ -328,8 +370,12 @@ class LocalFileService {
       await for (final entity in parent.list(followLinks: false)) {
         if (entity is! File) continue;
         final extension = p.extension(entity.path).toLowerCase();
-        if (extension != '.jpg' && extension != '.jpeg' && extension != '.png') continue;
-        if (!preferred.contains(p.basenameWithoutExtension(entity.path).toLowerCase())) continue;
+        if (extension != '.jpg' && extension != '.jpeg' && extension != '.png')
+          continue;
+        if (!preferred.contains(
+          p.basenameWithoutExtension(entity.path).toLowerCase(),
+        ))
+          continue;
         if (await entity.length() > 8 * 1024 * 1024) return null;
         final artDir = await _ensureSubdir('artwork');
         final targetExtension = extension == '.png' ? '.png' : '.jpg';

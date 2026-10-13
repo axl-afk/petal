@@ -25,7 +25,12 @@ class LyricsService {
 
     // 1. Try the exact-match endpoint first — fastest and most accurate when
     // it hits.
-    final exact = await _tryGetExact(title: title, artist: artist, album: album, duration: duration);
+    final exact = await _tryGetExact(
+      title: title,
+      artist: artist,
+      album: album,
+      duration: duration,
+    );
     if (exact != null) return exact;
 
     // Filename-like tags and common suffixes ("feat.", remaster/year,
@@ -50,9 +55,15 @@ class LyricsService {
     if (result.found) return result;
 
     // Some tags put every artist after the first into the artist string.
-    final primaryArtist = cleanArtist.split(RegExp(r'\s*(?:,|&| x | feat\.? )\s*', caseSensitive: false)).first;
+    final primaryArtist = cleanArtist
+        .split(RegExp(r'\s*(?:,|&| x | feat\.? )\s*', caseSensitive: false))
+        .first;
     if (primaryArtist != cleanArtist && primaryArtist.isNotEmpty) {
-      return _trySearch(title: cleanTitle, artist: primaryArtist, duration: duration);
+      return _trySearch(
+        title: cleanTitle,
+        artist: primaryArtist,
+        duration: duration,
+      );
     }
     return result;
   }
@@ -72,9 +83,12 @@ class LyricsService {
     final uri = Uri.parse('$_base/get').replace(queryParameters: params);
 
     try {
-      final res = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 8));
+      final res = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return null;
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final json =
+          jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return _resultFromJson(json);
     } catch (_) {
       return null;
@@ -86,15 +100,15 @@ class LyricsService {
     required String artist,
     Duration? duration,
   }) async {
-    final uri = Uri.parse('$_base/search').replace(queryParameters: {
-      'track_name': title,
-      'artist_name': artist,
-    });
+    final uri = Uri.parse('$_base/search')
+        .replace(queryParameters: {'track_name': title, 'artist_name': artist});
 
     try {
-      final res = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 8));
+      final res = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return const LyricsResult.notFound();
-      final list = jsonDecode(res.body) as List<dynamic>;
+      final list = jsonDecode(utf8.decode(res.bodyBytes)) as List<dynamic>;
       if (list.isEmpty) return const LyricsResult.notFound();
 
       Map<String, dynamic> best = list.first as Map<String, dynamic>;
@@ -112,13 +126,27 @@ class LyricsService {
         if (duration != null && d != null) {
           score -= (d - duration.inSeconds).abs().clamp(0, 90).toInt();
         }
-        if (map['syncedLyrics'] is String && (map['syncedLyrics'] as String).trim().isNotEmpty) {
+        if (map['syncedLyrics'] is String &&
+            (map['syncedLyrics'] as String).trim().isNotEmpty) {
           score += 12;
         }
         if (score > bestScore) {
           bestScore = score;
           best = map;
         }
+      }
+      // Search can return a different song with a similar name. Prefer an
+      // honest missing result over showing somebody else's lyrics.
+      final bestTitle = _normalized(best['trackName'] as String? ?? '');
+      final bestArtist = _normalized(best['artistName'] as String? ?? '');
+      final requestedTitle = _normalized(title);
+      final requestedArtist = _normalized(artist);
+      if (bestTitle.isEmpty ||
+          bestTitle != requestedTitle ||
+          (requestedArtist.isNotEmpty &&
+              requestedArtist != 'unknown artist' &&
+              bestArtist != requestedArtist)) {
+        return const LyricsResult.notFound();
       }
       return _resultFromJson(best);
     } catch (_) {
@@ -133,12 +161,27 @@ class LyricsService {
 
   static String _cleanTitle(String value) => value
       .replaceAll(RegExp(r'\.[a-z0-9]{2,5}$', caseSensitive: false), '')
-      .replaceAll(RegExp(r'\s*[\[(](?:feat\.?|ft\.?|remaster(?:ed)?|official|audio|video|lyrics?).*?[\])]', caseSensitive: false), '')
-      .replaceAll(RegExp(r'\s+-\s+(?:remaster(?:ed)?|official|audio|video|lyrics?).*$', caseSensitive: false), '')
+      .replaceAll(
+        RegExp(
+          r'\s*[\[(](?:feat\.?|ft\.?|remaster(?:ed)?|official|audio|video|lyrics?).*?[\])]',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .replaceAll(
+        RegExp(
+          r'\s+-\s+(?:remaster(?:ed)?|official|audio|video|lyrics?).*$',
+          caseSensitive: false,
+        ),
+        '',
+      )
       .trim();
 
   static String _cleanArtist(String value) => value
-      .replaceAll(RegExp(r'\s*[\[(](?:feat\.?|ft\.?).*?[\])]', caseSensitive: false), '')
+      .replaceAll(
+        RegExp(r'\s*[\[(](?:feat\.?|ft\.?).*?[\])]', caseSensitive: false),
+        '',
+      )
       .trim();
 
   static String _normalized(String value) => value
@@ -184,10 +227,16 @@ class LyricsService {
         final millis = fracStr == null
             ? 0
             : int.parse(fracStr.padRight(3, '0').substring(0, 3));
-        out.add(LyricLine(
-          time: Duration(minutes: minutes, seconds: seconds, milliseconds: millis),
-          text: text,
-        ));
+        out.add(
+          LyricLine(
+            time: Duration(
+              minutes: minutes,
+              seconds: seconds,
+              milliseconds: millis,
+            ),
+            text: text,
+          ),
+        );
       }
     }
 

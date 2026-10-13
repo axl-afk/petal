@@ -50,6 +50,13 @@ class TrackDao extends DatabaseAccessor<AppDatabase> with _$TrackDaoMixin {
     return query.watch();
   }
 
+  /// Bound Home to the visible rows; full libraries can contain thousands.
+  Stream<List<Track>> watchRecent({int limit = 8}) =>
+      (select(tracks)
+            ..orderBy([(t) => OrderingTerm.desc(t.addedAt)])
+            ..limit(limit))
+          .watch();
+
   Stream<List<Track>> watchByArtist(String artist) =>
       (select(tracks)
             ..where((t) => t.artist.equals(artist))

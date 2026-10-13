@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/duration_format.dart';
 import '../../utils/ui_scale.dart';
 import '../widgets/track_art.dart';
+import '../widgets/glass_surface.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
@@ -29,110 +30,189 @@ class MiniPlayer extends ConsumerWidget {
     final compact = width < 720;
     final veryNarrow = width < 430;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 0 : 22, 0, compact ? 0 : 22, 10),
-      child: Material(
-        color: petal.colors.surface.withOpacity(.94),
-        elevation: compact ? 0 : 8,
-        shadowColor: Colors.black.withOpacity(.22),
-        borderRadius: BorderRadius.circular(compact ? 0 : 24),
-        clipBehavior: Clip.antiAlias,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => ref.read(currentSectionProvider.notifier).state =
-              AppSection.nowPlaying,
-          onVerticalDragEnd: (details) {
-            if ((details.primaryVelocity ?? 0) < -250) {
-              ref.read(currentSectionProvider.notifier).state =
-                  AppSection.nowPlaying;
-            }
-          },
-          child: SizedBox(
-            height: (compact ? 84 : 86) * scale,
-            child: Row(
-              children: [
-                const SizedBox(width: 12),
-                TrackArt(track: track, size: 50 * scale, iconSize: 19),
-                const SizedBox(width: 12),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: veryNarrow ? 84 : 120,
-                    maxWidth: compact ? 180 : 230,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
+    return Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 1120 * scale),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 10 : 22,
+            0,
+            compact ? 10 : 22,
+            10,
+          ),
+          child: GlassSurface(
+            borderRadius: BorderRadius.circular(24),
+            child: Material(
+              color: Colors.transparent,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => ref.read(currentSectionProvider.notifier).state =
+                    AppSection.nowPlaying,
+                onVerticalDragEnd: (details) {
+                  if ((details.primaryVelocity ?? 0) < -250) {
+                    ref.read(currentSectionProvider.notifier).state =
+                        AppSection.nowPlaying;
+                  }
+                },
+                child: SizedBox(
+                  height: (compact ? 82 : 76) * scale,
+                  child: compact
+                      ? Column(
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 12),
+                                  TrackArt(
+                                    track: track,
+                                    size: 48 * scale,
+                                    iconSize: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          track.displayTitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: petal.text.miniTitle.copyWith(
+                                            fontSize: 15.5,
+                                          ),
+                                        ),
+                                        Text(
+                                          track.displayArtist,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: petal.text.miniArtist.copyWith(
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  _MiniPlayPause(
+                                    playing: playback.isPlaying,
+                                    buffering: playback.isBuffering,
+                                    onTap: controller.togglePlayPause,
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Next',
+                                    icon: const Icon(Icons.skip_next_rounded),
+                                    onPressed: controller.next,
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: _CompactTimeline(
+                                fallbackDuration: track.duration,
+                                controller: controller,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
                     children: [
-                      Text(track.displayTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: petal.text.miniTitle),
-                      Text(track.displayArtist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: petal.text.miniArtist),
+                      const SizedBox(width: 12),
+                      TrackArt(track: track, size: 46 * scale, iconSize: 19),
+                      const SizedBox(width: 12),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: veryNarrow ? 84 : 120,
+                          maxWidth: compact ? 180 : 230,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              track.displayTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: petal.text.miniTitle,
+                            ),
+                            Text(
+                              track.displayArtist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: petal.text.miniArtist,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!compact) ...[
+                        IconButton(
+                          tooltip: track.isFavorite
+                              ? 'Remove from favorites'
+                              : 'Add to favorites',
+                          icon: Icon(
+                            track.isFavorite
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                          ),
+                          color: track.isFavorite
+                              ? petal.colors.favorite
+                              : petal.colors.ink2,
+                          onPressed: () => ref
+                              .read(libraryControllerProvider.notifier)
+                              .toggleFavorite(track),
+                        ),
+                        IconButton(
+                          tooltip: 'Previous',
+                          icon: const Icon(
+                            Icons.skip_previous_rounded,
+                            size: 24,
+                          ),
+                          onPressed: controller.previous,
+                        ),
+                      ],
+                      _MiniPlayPause(
+                        playing: playback.isPlaying,
+                        buffering: playback.isBuffering,
+                        onTap: controller.togglePlayPause,
+                      ),
+                      IconButton(
+                        tooltip: 'Next',
+                        icon: const Icon(Icons.skip_next_rounded, size: 24),
+                        onPressed: controller.next,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: _MiniTimeline(
+                              fallbackDuration: track.duration,
+                              controller: controller,
+                              compact: compact,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!compact) ...[
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 180,
+                          child: _MiniVolume(controller: controller),
+                        ),
+                      ],
+                      if (!compact)
+                        IconButton(
+                          tooltip: 'Full screen',
+                          onPressed: WindowService.toggleFullscreen,
+                          icon: const Icon(Icons.fullscreen_rounded),
+                        ),
+                      const SizedBox(width: 10),
                     ],
                   ),
                 ),
-                if (!compact) ...[
-                  IconButton(
-                    tooltip: track.isFavorite
-                        ? 'Remove from favorites'
-                        : 'Add to favorites',
-                    icon: Icon(track.isFavorite
-                        ? Icons.favorite
-                        : Icons.favorite_border),
-                    color: track.isFavorite
-                        ? petal.colors.accent
-                        : petal.colors.ink2,
-                    onPressed: () => ref
-                        .read(libraryControllerProvider.notifier)
-                        .toggleFavorite(track),
-                  ),
-                  IconButton(
-                    tooltip: 'Previous',
-                    icon: const Icon(Icons.skip_previous_rounded, size: 24),
-                    onPressed: controller.previous,
-                  ),
-                ],
-                _MiniPlayPause(
-                  playing: playback.isPlaying,
-                  buffering: playback.isBuffering,
-                  onTap: controller.togglePlayPause,
-                ),
-                IconButton(
-                  tooltip: 'Next',
-                  icon: const Icon(Icons.skip_next_rounded, size: 24),
-                  onPressed: controller.next,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: _MiniTimeline(
-                        fallbackDuration: track.duration,
-                        controller: controller,
-                        compact: compact,
-                      ),
-                    ),
-                  ),
-                ),
-                if (!compact) ...[
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 180,
-                    child: _MiniVolume(controller: controller),
-                  ),
-                ],
-                if (!compact)
-                  IconButton(
-                    tooltip: 'Full screen',
-                    onPressed: WindowService.toggleFullscreen,
-                    icon: const Icon(Icons.fullscreen_rounded),
-                  ),
-                const SizedBox(width: 10),
-              ],
+              ),
             ),
           ),
         ),
@@ -175,8 +255,12 @@ class _MiniTimeline extends StatelessWidget {
                   activeTrackColor: petal.colors.accent,
                   inactiveTrackColor: petal.colors.ink3.withOpacity(.28),
                   thumbColor: petal.colors.accent,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 5,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 13,
+                  ),
                 ),
                 child: Slider(
                   value: progress,
@@ -197,6 +281,68 @@ class _MiniTimeline extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// A full-width seek strip below the mobile controls. Keeping it on a
+/// separate row prevents the slider thumb from being squeezed offscreen by
+/// the title and transport buttons on narrow phones.
+class _CompactTimeline extends StatelessWidget {
+  final Duration fallbackDuration;
+  final PlaybackController controller;
+
+  const _CompactTimeline({
+    required this.fallbackDuration,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final petal = context.petal;
+    return StreamBuilder<Duration?>(
+      stream: controller.player.durationStream,
+      builder: (context, durationSnapshot) => StreamBuilder<Duration>(
+        stream: controller.player.positionStream,
+        builder: (context, positionSnapshot) {
+          final totalMs = math.max(
+            1,
+            (durationSnapshot.data ?? fallbackDuration).inMilliseconds,
+          );
+          final progress = (positionSnapshot.data ?? Duration.zero)
+              .inMilliseconds
+              .clamp(0, totalMs) /
+              totalMs;
+          return LayoutBuilder(
+            builder: (context, constraints) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) => _seek(details.localPosition.dx, constraints.maxWidth, totalMs),
+              onHorizontalDragUpdate: (details) =>
+                  _seek(details.localPosition.dx, constraints.maxWidth, totalMs),
+              child: SizedBox(
+                height: 18,
+                child: Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
+                      value: progress.toDouble(),
+                      backgroundColor: petal.colors.ink3.withOpacity(.28),
+                      valueColor: AlwaysStoppedAnimation<Color>(petal.colors.accent),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _seek(double dx, double width, int totalMs) {
+    if (width <= 0) return;
+    final fraction = (dx / width).clamp(0.0, 1.0);
+    controller.seek(Duration(milliseconds: (totalMs * fraction).round()));
   }
 }
 
@@ -234,8 +380,12 @@ class _MiniVolume extends StatelessWidget {
                   trackHeight: 3,
                   activeTrackColor: petal.colors.accent,
                   inactiveTrackColor: petal.colors.ink3.withOpacity(.28),
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4.5),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 4.5,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 11,
+                  ),
                 ),
                 child: Slider(value: volume, onChanged: controller.setVolume),
               ),

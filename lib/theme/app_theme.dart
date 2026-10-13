@@ -50,6 +50,17 @@ ThemeData buildPetalThemeData(AppColors c, Brightness brightness) {
     'Petal Gujarati',
     'Petal Gurmukhi',
     'Petal Kannada',
+    // The packaged families above cover common scripts offline. Allow the
+    // operating system's Noto families to supply additional scripts without
+    // forcing all users to download a very large universal font collection.
+    'Noto Sans Sinhala',
+    'Noto Sans Myanmar',
+    'Noto Sans Khmer',
+    'Noto Sans Georgian',
+    'Noto Sans Armenian',
+    'Noto Sans Ethiopic',
+    'Noto Sans Lao',
+    'Noto Sans CJK KR',
     // Native CJK families cover the five target OSes without adding a 19 MB
     // font collection to every Petal installer.
     'Noto Sans CJK SC',
@@ -71,18 +82,36 @@ ThemeData buildPetalThemeData(AppColors c, Brightness brightness) {
     scaffoldBackgroundColor: c.ground,
     canvasColor: c.ground,
     primaryColor: c.accent,
-    colorScheme: (brightness == Brightness.dark ? const ColorScheme.dark() : const ColorScheme.light())
-        .copyWith(
-      primary: c.accent,
-      onPrimary: c.accentInk,
-      surface: c.surface,
-      onSurface: c.ink,
-      secondary: c.accent,
-    ),
+    colorScheme:
+        (brightness == Brightness.dark
+                ? const ColorScheme.dark()
+                : const ColorScheme.light())
+            .copyWith(
+              primary: c.accent,
+              onPrimary: c.accentInk,
+              surface: c.surface,
+              onSurface: c.ink,
+              secondary: c.accent,
+            ),
     dividerColor: c.hairline,
     splashFactory: InkRipple.splashFactory,
     highlightColor: c.hairline,
     hoverColor: c.hairline,
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: c.ink,
+        backgroundColor: c.surface.withOpacity(.24),
+        side: BorderSide(color: c.hairline2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+    ),
+    chipTheme: base.chipTheme.copyWith(
+      backgroundColor: c.surface.withOpacity(.30),
+      selectedColor: c.accent.withOpacity(.24),
+      side: BorderSide(color: c.hairline2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
     textTheme: base.textTheme.apply(
       bodyColor: c.ink,
       displayColor: c.ink,
@@ -94,5 +123,11 @@ ThemeData buildPetalThemeData(AppColors c, Brightness brightness) {
   );
 }
 
-final ThemeData petalLightTheme = buildPetalThemeData(AppColors.light, Brightness.light);
-final ThemeData petalDarkTheme = buildPetalThemeData(AppColors.dark, Brightness.dark);
+final ThemeData petalLightTheme = buildPetalThemeData(
+  AppColors.light,
+  Brightness.light,
+);
+final ThemeData petalDarkTheme = buildPetalThemeData(
+  AppColors.dark,
+  Brightness.dark,
+);

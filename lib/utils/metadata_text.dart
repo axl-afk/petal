@@ -5,9 +5,8 @@ import 'package:charset/charset.dart';
 /// Repairs the two common ways multilingual ID3 text is misread:
 /// UTF-8 bytes declared as ID3 Latin-1, and UTF-8 bytes decoded as GBK.
 ///
-/// A candidate is only accepted when it produces an Indic/Arabic script and
-/// removes corruption markers. Legitimate Chinese/Japanese/Korean metadata is
-/// therefore left untouched.
+/// A candidate must score substantially better than the original. Correctly
+/// decoded Unicode, including CJK, Cyrillic, Greek and Indic text, is kept.
 String cleanMetadataText(String value) {
   final input = value.replaceAll('\u0000', '').trim();
   if (input.isEmpty) return input;
@@ -58,16 +57,29 @@ int _score(String value) {
     if (rune >= 0x80 && rune <= 0x9f) score -= 8;
     if (_isSupportedMusicScript(rune)) score += 4;
   }
-  for (final marker in const ['Ã', 'Â', 'à¤', 'à¥', 'à¦', 'à§']) {
+  for (final marker in const ['Ã', 'Â', 'Ð', 'Ñ', 'Î', 'Ï', 'ã€', 'ã‚', 'ãƒ', 'ì', 'ðŸ', 'à¤', 'à¥', 'à¦', 'à§']) {
     if (value.contains(marker)) score -= 12;
   }
   return score;
 }
 
 bool _isSupportedMusicScript(int rune) =>
+    (rune >= 0x0370 && rune <= 0x052f) || // Greek and Cyrillic
+    (rune >= 0x0530 && rune <= 0x058f) || // Armenian
     (rune >= 0x0600 && rune <= 0x06ff) || // Arabic
     (rune >= 0x0900 && rune <= 0x097f) || // Devanagari / Hindi
     (rune >= 0x0980 && rune <= 0x09ff) || // Bengali
     (rune >= 0x0a00 && rune <= 0x0d7f) || // remaining Indic blocks
     (rune >= 0x0e00 && rune <= 0x0e7f) || // Thai
-    (rune >= 0x0590 && rune <= 0x05ff); // Hebrew
+    (rune >= 0x0d80 && rune <= 0x0dff) || // Sinhala
+    (rune >= 0x0e80 && rune <= 0x0eff) || // Lao
+    (rune >= 0x0f00 && rune <= 0x0fff) || // Tibetan
+    (rune >= 0x0590 && rune <= 0x05ff) || // Hebrew
+    (rune >= 0x1000 && rune <= 0x109f) || // Myanmar
+    (rune >= 0x10a0 && rune <= 0x10ff) || // Georgian
+    (rune >= 0x1200 && rune <= 0x137f) || // Ethiopic
+    (rune >= 0x1780 && rune <= 0x17ff) || // Khmer
+    (rune >= 0x3040 && rune <= 0x30ff) || // Japanese Kana
+    (rune >= 0x3400 && rune <= 0x9fff) || // Han characters
+    (rune >= 0xac00 && rune <= 0xd7af) || // Korean Hangul
+    (rune >= 0x1f000 && rune <= 0x1faff); // Emoji in user titles
